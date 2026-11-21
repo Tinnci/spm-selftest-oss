@@ -11,8 +11,8 @@
 ## 下载与启动
 
 在 [GitHub Releases](https://github.com/Tinnci/spm-selftest-oss/releases/latest) 下载
-Windows x64 安装包 `*-x64-setup.exe`。安装后可从开始菜单打开。Release 的 Windows
-便携 ZIP 包含桌面程序和 CLI，解压后可直接运行。
+`SPM-SelfTest-<version>-windows-x86_64.exe`，双击即可启动便携版。
+需要 CLI 时下载便携 ZIP。需要安装版时下载 `*-x64-setup.exe`，安装后可从开始菜单打开。
 
 首次启动会在
 `%LOCALAPPDATA%\SPM-SelfTest` 建立记录目录，并把 Maon 旧目录中的自测记录导入一次。
@@ -38,5 +38,5 @@ spm-selftest-cli.exe export <record-id> --format txt4 --out .\out --encoding gbk
 
 ## 卸载
 
-通过 Windows「已安装的应用」卸载安装版。便携版可删除解压目录。
+通过 Windows「已安装的应用」卸载安装版。便携版可直接删除 exe 或解压目录。
 自测记录保存在独立的 `%LOCALAPPDATA%\SPM-SelfTest`，需要保留时请先备份。

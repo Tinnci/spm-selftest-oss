@@ -109,7 +109,7 @@ jobs:
             --bundles ${{ matrix.bundle }}
             -- --locked
 
-      - name: Upload Windows portable package and checksum
+      - name: Upload Windows portable EXE, ZIP and checksum
         if: runner.os == 'Windows'
         shell: pwsh
         env:
@@ -119,6 +119,7 @@ jobs:
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
           $name = "SPM-SelfTest-$version-windows-x86_64"
           $bundleDir = Join-Path $env:RUNNER_TEMP "$name-bundle"
+          $portable = Join-Path $env:RUNNER_TEMP "$name.exe"
           $zip = Join-Path $env:RUNNER_TEMP "$name.zip"
           $checksum = Join-Path $env:RUNNER_TEMP "$name.sha256"
           $target = "src-tauri/target/release"
@@ -128,10 +129,11 @@ jobs:
           }
           New-Item -ItemType Directory -Path $bundleDir | Out-Null
           Copy-Item "$target/spm-selftest.exe", "$target/spm-selftest-cli.exe", "docs/WINDOWS.md", LICENSE, NOTICE $bundleDir
+          Copy-Item "$target/spm-selftest.exe" $portable
           Compress-Archive -LiteralPath $bundleDir -DestinationPath $zip -CompressionLevel Fastest
           $sha = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
           Set-Content -Path $checksum -Value "$sha  $name.zip"
-          gh release upload "$env:GITHUB_REF_NAME" $zip $checksum --clobber
+          gh release upload "$env:GITHUB_REF_NAME" $portable $zip $checksum --clobber
 
   manifest:
     name: Validate updater manifest

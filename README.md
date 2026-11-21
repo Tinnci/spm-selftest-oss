@@ -114,8 +114,9 @@ Rust 测试与格式检查。Node 和 Rust 版本分别由 `.nvmrc` 和 `rust-to
 ## 发布与桌面更新
 
 GitHub Actions 在推送与应用版本一致的 `v*` 标签时构建 Windows x64 NSIS 安装包和
-Linux x86_64 AppImage，签名后上传至草稿 Release。Windows 还提供包含 GUI 和 CLI 的
-便携 ZIP 与 SHA-256。发布 workflow 会校验两个平台的更新清单，并写入公开下载地址。
+Linux x86_64 AppImage，签名后上传至草稿 Release。Windows 还提供可直接运行的
+单文件便携 EXE、包含 GUI 和 CLI 的便携 ZIP 与 ZIP 的 SHA-256。发布 workflow 会校验
+两个平台的更新清单，并写入公开下载地址。
 
 安装发布包后，应用会在启动时检查更新，也可以在「设置 → 关于」手动检查。发现新版本后，
 需要确认安装并重启。应用优先直连公开的 GitHub Release，检查或下载失败时从
