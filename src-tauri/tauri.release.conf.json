@@ -1,0 +1,15 @@
+{
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ3RTNFNDlDRUIwNTRFMEQKUldRTlRnWHJuT1RqMTYrenBBTHZzR0ZkUDJ5TkJKRnNxd3JUL2Fad3poczhtVzlVdU4zWmtRMU8K",
+      "endpoints": [
+        "https://github.com/Tinnci/spm-selftest-oss/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Device self-test collection, storage, diffing and export; caption buttons and dragging for the undecorated window",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:app:allow-version",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-maximized",
+    "allow-self-test-env",
+    "allow-self-test-run",
+    "allow-self-test-list",
+    "allow-self-test-get",
+    "allow-self-test-update-meta",
+    "allow-self-test-delete",
+    "allow-self-test-diff",
+    "allow-self-test-export-file",
+    "allow-self-test-storage",
+    "allow-self-test-rename",
+    "allow-self-test-recheck",
+    "allow-self-test-review-plan",
+    "allow-self-test-review-save",
+    "allow-self-test-review-status",
+    "allow-self-test-adb-restart",
+    "allow-self-test-wait-device",
+    "clipboard-manager:allow-write-text",
+    "opener:allow-reveal-item-in-dir",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://github.com/Tinnci/spm-selftest-oss" }]
+    },
+    "process:allow-restart",
+    "allow-check-desktop-update",
+    "allow-install-desktop-update"
+  ]
+}
