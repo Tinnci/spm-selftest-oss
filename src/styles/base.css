@@ -57,7 +57,7 @@ svg {
 .brand-mark {
   display: grid;
   place-items: center;
-  color: var(--foreground);
+  color: var(--ok);
 }
 .app-shell main {
   min-width: 0;
