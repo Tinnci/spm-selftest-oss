@@ -3,7 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 export const desktop = isTauri;
 
 export function desktopOnly(): never {
-  throw { code: "unsupported" };
+  throw Object.assign(new Error("unsupported"), { code: "unsupported" });
 }
 
 export function call<T>(

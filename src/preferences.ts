@@ -62,12 +62,14 @@ export const DEFAULT_XLSX: XlsxPreferences = {
 
 type Preferences = {
   railCollapsed: boolean;
+  guideDismissed: boolean;
   recordTags: RecordTagVisibility;
   xlsx: XlsxPreferences;
 };
 
 const DEFAULT: Preferences = {
   railCollapsed: false,
+  guideDismissed: false,
   recordTags: DEFAULT_RECORD_TAGS,
   xlsx: DEFAULT_XLSX,
 };
@@ -99,6 +101,7 @@ export function readPreferences(): Preferences {
         : "";
     return {
       railCollapsed: Boolean(parsed.railCollapsed),
+      guideDismissed: Boolean(parsed.guideDismissed),
       recordTags: { ...DEFAULT_RECORD_TAGS, ...parsed.recordTags },
       xlsx: {
         filename:

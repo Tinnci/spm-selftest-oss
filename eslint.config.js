@@ -22,6 +22,15 @@ export default [
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },
+    rules: {
+      eqeqeq: ["error", "always", { null: "ignore" }],
+      "no-var": "error",
+      "prefer-const": "error",
+      "no-eval": "error",
+      "no-implied-eval": "error",
+      "no-new-func": "error",
+      "no-throw-literal": "error",
+    },
   },
   {
     files: ["**/*.{ts,tsx}"],
@@ -49,11 +58,17 @@ export default [
     },
   },
   {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      "no-console": ["error", { allow: ["warn", "error"] }],
+    },
+  },
+  {
     files: ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks, "jsx-a11y": jsxA11y },
     rules: {
       "react-hooks/rules-of-hooks": "error",
-      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/exhaustive-deps": "error",
       ...jsxA11y.flatConfigs.recommended.rules,
       "jsx-a11y/label-has-associated-control": "off",
       "jsx-a11y/no-autofocus": "off",
