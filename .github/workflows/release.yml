@@ -158,3 +158,4 @@ jobs:
           gh api "repos/$GH_REPO/releases" | jq --arg tag "$GITHUB_REF_NAME" '.[] | select(.tag_name == $tag) | .assets' > "$manifest_dir/assets.json"
           node scripts/prepare-update-manifest.mjs "$manifest_dir/latest.json" "$manifest_dir/assets.json" "$GH_REPO" "$GITHUB_REF_NAME"
           gh release upload "$GITHUB_REF_NAME" "$manifest_dir/latest.json" --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
