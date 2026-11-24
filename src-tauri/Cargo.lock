@@ -3998,7 +3998,7 @@ dependencies = [
  "rust_xlsxwriter",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
