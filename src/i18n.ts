@@ -38,6 +38,7 @@ void i18n.use(initReactI18next).init({
   supportedLngs: ["zh-CN", "en"],
   initAsync: false,
   keySeparator: false,
+  returnEmptyString: true,
   interpolation: { escapeValue: false },
   react: { useSuspense: false },
 });
