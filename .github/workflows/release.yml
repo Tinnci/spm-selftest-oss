@@ -59,8 +59,13 @@ jobs:
         include:
           - os: windows-latest
             bundle: nsis
+            arch_label: windows-x86_64
+          - os: windows-11-arm
+            bundle: nsis
+            arch_label: windows-aarch64
           - os: ubuntu-22.04
             bundle: appimage
+            arch_label: linux-x86_64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -120,7 +125,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          $name = "SPM-SelfTest-$version-windows-x86_64"
+          $name = "SPM-SelfTest-$version-${{ matrix.arch_label }}"
           $bundleDir = Join-Path $env:RUNNER_TEMP "$name-bundle"
           $portable = Join-Path $env:RUNNER_TEMP "$name.exe"
           $zip = Join-Path $env:RUNNER_TEMP "$name.zip"
