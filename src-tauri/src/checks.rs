@@ -275,7 +275,78 @@ pub fn evaluate(record: &SelfTestRecord, baseline: Option<&SelfTestRecord>) -> V
         checks.push(check("pass", "required_complete"));
     }
 
+    evaluate_gemini_placement(record, &mut checks);
+
     checks
+}
+
+fn is_gemini_item(item: &crate::self_test::LauncherItem) -> bool {
+    item.package
+        .eq_ignore_ascii_case("com.google.android.apps.bard")
+        || item
+            .component
+            .to_ascii_lowercase()
+            .contains("com.google.android.apps.bard")
+        || item.title.trim().eq_ignore_ascii_case("gemini")
+}
+
+fn evaluate_gemini_placement(record: &SelfTestRecord, checks: &mut Vec<SelfTestCheck>) {
+    if !(is_ir(record) || is_mr(record) || is_smr(record) || is_lr(record)) {
+        return;
+    }
+    let Some(layout) = &record.launcher_layout else {
+        return;
+    };
+    if layout.items.is_empty() {
+        return;
+    }
+
+    let mut best_ok: Option<String> = None;
+    let mut wrong_screen: Option<String> = None;
+
+    for item in layout.items.iter().filter(|i| is_gemini_item(i)) {
+        match item.container.as_str() {
+            "hotseat" => {
+                best_ok.get_or_insert_with(|| "Hotseat".to_owned());
+            }
+            "workspace" => {
+                if item.screen == 0 || item.screen == 1 {
+                    best_ok.get_or_insert_with(|| (item.screen + 1).to_string());
+                } else {
+                    wrong_screen.get_or_insert_with(|| (item.screen + 1).to_string());
+                }
+            }
+            "folder" => {
+                let parent = item
+                    .folder_id
+                    .as_deref()
+                    .and_then(|fid| layout.items.iter().find(|p| p.id == fid));
+                if let Some(folder) = parent {
+                    if folder.container == "hotseat" {
+                        best_ok.get_or_insert_with(|| "Hotseat".to_owned());
+                    } else if folder.screen == 0 || folder.screen == 1 {
+                        let label = if folder.title.trim().is_empty() {
+                            (folder.screen + 1).to_string()
+                        } else {
+                            format!("{} ({})", folder.screen + 1, folder.title.trim())
+                        };
+                        best_ok.get_or_insert(label);
+                    } else {
+                        wrong_screen.get_or_insert_with(|| (folder.screen + 1).to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(screen) = best_ok {
+        checks.push(with("pass", "gemini_screen_ok", [("screen", screen)]));
+    } else if let Some(screen) = wrong_screen {
+        checks.push(with("warn", "gemini_screen_wrong", [("screen", screen)]));
+    } else {
+        checks.push(check("warn", "gemini_missing_from_launcher"));
+    }
 }
 
 pub fn status(checks: &[SelfTestCheck]) -> &'static str {
@@ -438,5 +509,71 @@ mod tests {
         rec.fields.insert("gms".into(), "(not set)".into());
         rec.fields.insert("fingerprint".into(), "(not set)".into());
         assert!(has_blocking(&evaluate(&rec, None)));
+    }
+
+    #[test]
+    fn gemini_placement_requires_screen_1_or_2_for_all_gms_types() {
+        use crate::self_test::{LauncherItem, LauncherLayout};
+
+        let make_layout = |items: Vec<LauncherItem>| LauncherLayout {
+            collected_at: "2026-11-25T00:00:00Z".into(),
+            default_launcher: "com.android.launcher3/.Launcher".into(),
+            launcher_package: "com.android.launcher3".into(),
+            display_size: "1080x2340".into(),
+            display_density: "440".into(),
+            grid_columns: 4,
+            grid_rows: 6,
+            hotseat_count: 4,
+            source: "dumpsys".into(),
+            items,
+            notes: vec![],
+        };
+        let gemini_item = |container: &str, screen: i32| LauncherItem {
+            id: "23".into(),
+            container: container.into(),
+            folder_id: None,
+            screen,
+            cell_x: 1,
+            cell_y: 0,
+            span_x: 1,
+            span_y: 1,
+            rank: 0,
+            item_type: "app".into(),
+            title: "Gemini".into(),
+            package: "com.google.android.apps.bard".into(),
+            component: "com.google.android.apps.bard/.BardEntryPointActivity".into(),
+        };
+
+        for ttype in ["IR", "MR", "SMR", "LR"] {
+            let mut rec = record(ttype);
+            rec.launcher_layout = Some(make_layout(vec![gemini_item("workspace", 1)]));
+            assert!(has(&evaluate(&rec, None), "gemini_screen_ok", "pass"));
+        }
+
+        let mut wrong = record("IR");
+        wrong.launcher_layout = Some(make_layout(vec![gemini_item("workspace", 2)]));
+        assert!(has(&evaluate(&wrong, None), "gemini_screen_wrong", "warn"));
+
+        let mut missing = record("MR");
+        missing.launcher_layout = Some(make_layout(vec![LauncherItem {
+            id: "1".into(),
+            container: "workspace".into(),
+            folder_id: None,
+            screen: 0,
+            cell_x: 0,
+            cell_y: 0,
+            span_x: 1,
+            span_y: 1,
+            rank: 0,
+            item_type: "app".into(),
+            title: "Clock".into(),
+            package: "com.google.android.deskclock".into(),
+            component: "com.google.android.deskclock/.DeskClock".into(),
+        }]));
+        assert!(has(
+            &evaluate(&missing, None),
+            "gemini_missing_from_launcher",
+            "warn"
+        ));
     }
 }

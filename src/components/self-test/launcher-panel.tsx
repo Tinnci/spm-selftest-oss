@@ -14,6 +14,14 @@ function itemLabel(item: LauncherItem): string {
   return `#${item.id}`;
 }
 
+function isGeminiItem(item: LauncherItem): boolean {
+  return (
+    item.package.toLowerCase() === "com.google.android.apps.bard" ||
+    item.component.toLowerCase().includes("com.google.android.apps.bard") ||
+    item.title.trim().toLowerCase() === "gemini"
+  );
+}
+
 export function LauncherLayoutPanel({
   layout,
   serial,
@@ -73,6 +81,36 @@ export function LauncherLayoutPanel({
     };
   }, [layout]);
 
+  const geminiPlacement = useMemo(() => {
+    if (!layout || !layout.items.length) return null;
+    for (const item of layout.items) {
+      if (!isGeminiItem(item)) continue;
+      if (item.container === "hotseat") return { ok: true, screen: "Hotseat" };
+      if (item.container === "workspace") {
+        return {
+          ok: item.screen === 0 || item.screen === 1,
+          screen: String(item.screen + 1),
+        };
+      }
+      if (item.container === "folder" && item.folder_id) {
+        const parent = layout.items.find((p) => p.id === item.folder_id);
+        if (parent) {
+          return {
+            ok:
+              parent.container === "hotseat" ||
+              parent.screen === 0 ||
+              parent.screen === 1,
+            screen:
+              parent.container === "hotseat"
+                ? "Hotseat"
+                : String(parent.screen + 1),
+          };
+        }
+      }
+    }
+    return { ok: false, screen: null };
+  }, [layout]);
+
   const filteredItems = useMemo(() => {
     const items = layout?.items ?? [];
     const q = filter.trim().toLowerCase();
@@ -101,6 +139,15 @@ export function LauncherLayoutPanel({
               ? `${layout.grid_columns}×${layout.grid_rows}`
               : t("selftest.launcher.noLayout")}
           </Badge>
+          {geminiPlacement ? (
+            <Badge variant={geminiPlacement.ok ? "outline" : "secondary"}>
+              {geminiPlacement.ok && geminiPlacement.screen
+                ? t("selftest.launcher.geminiBadgeOk", {
+                    screen: geminiPlacement.screen,
+                  })
+                : t("selftest.launcher.geminiBadgeWarn")}
+            </Badge>
+          ) : null}
           {layout?.launcher_package ? (
             <span className="selftest-launcher-chip">
               {t("selftest.launcher.defaultApp")}: {layout.launcher_package}
@@ -175,7 +222,7 @@ export function LauncherLayoutPanel({
                     {items.map((item) => (
                       <div
                         key={`${item.id}-${item.cell_x}-${item.cell_y}`}
-                        className={`selftest-launcher-cell is-${item.item_type}`}
+                        className={`selftest-launcher-cell is-${item.item_type}${isGeminiItem(item) ? " is-gemini" : ""}`}
                         style={{
                           gridColumn: `${Math.max(1, item.cell_x + 1)} / span ${Math.max(1, item.span_x)}`,
                           gridRow: `${Math.max(1, item.cell_y + 1)} / span ${Math.max(1, item.span_y)}`,
@@ -230,7 +277,9 @@ export function LauncherLayoutPanel({
           {folders.headers.length > 0 ? (
             <div className="selftest-launcher-hotseat-wrap">
               <div className="selftest-launcher-screen-title">
-                Folders ({folders.headers.length})
+                {t("selftest.launcher.folders", {
+                  count: folders.headers.length,
+                })}
               </div>
               <ul className="selftest-launcher-list">
                 {folders.headers.map((folder) => {

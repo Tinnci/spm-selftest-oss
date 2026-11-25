@@ -225,3 +225,42 @@ describe("errorText", () => {
     expect(errorText({})).toBe("操作失败，请重试。");
   });
 });
+
+describe("recordMarkdown launcher layout", () => {
+  it("renders launcher layout summary and screen arrangement when present", () => {
+    const md = recordMarkdown({
+      ...record,
+      launcher_layout: {
+        collected_at: "2026-11-25T15:00:00Z",
+        default_launcher: "com.android.launcher3/.Launcher",
+        launcher_package: "com.android.launcher3",
+        display_size: "1080x2340",
+        display_density: "440",
+        grid_columns: 4,
+        grid_rows: 6,
+        hotseat_count: 4,
+        source: "dumpsys",
+        items: [
+          {
+            id: "23",
+            container: "workspace",
+            screen: 1,
+            cell_x: 1,
+            cell_y: 0,
+            span_x: 1,
+            span_y: 1,
+            rank: 0,
+            item_type: "app",
+            title: "Gemini",
+            package: "com.google.android.apps.bard",
+            component: "com.google.android.apps.bard/.BardEntryPointActivity",
+          },
+        ],
+        notes: [],
+      },
+    });
+    expect(md).toContain("## Launcher Layout");
+    expect(md).toContain("Grid: 4x6 (hotseat 4)");
+    expect(md).toContain("Screen 2: Gemini (1,0 1x1)");
+  });
+});

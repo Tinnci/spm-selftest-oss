@@ -1003,6 +1003,11 @@
   border-style: dashed;
 }
 
+.selftest-launcher-cell.is-gemini {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
 .selftest-launcher-cell-title {
   font-weight: 600;
   overflow: hidden;

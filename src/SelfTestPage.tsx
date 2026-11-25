@@ -1758,6 +1758,12 @@ export function SelfTestPage({
                   run: () => jumpToCheck(check),
                 };
               }
+              if (check.code.startsWith("gemini_")) {
+                return {
+                  label: t("selftest.launcher.viewLayout"),
+                  run: () => setDetailTab("launcher"),
+                };
+              }
             }}
           />
         }

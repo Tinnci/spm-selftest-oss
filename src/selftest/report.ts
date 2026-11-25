@@ -86,7 +86,29 @@ export function recordMarkdown(record: SelfTestRecord): string {
       return `| ${fieldLabel(key)} | ${code(value)} |`;
     }),
   ];
-  return [header, "", ...meta, "", ...table].join("\n");
+  const sections = [header, "", ...meta, "", ...table];
+  if (record.launcher_layout) {
+    const layout = record.launcher_layout;
+    sections.push(
+      "",
+      "## Launcher Layout",
+      `- Launcher: ${layout.default_launcher || layout.launcher_package || "-"}`,
+      `- Grid: ${layout.grid_columns}x${layout.grid_rows} (hotseat ${layout.hotseat_count})`,
+      `- Display: ${layout.display_size || "-"} @ ${layout.display_density || "-"}dpi`,
+    );
+    const byScreen = new Map<number, string[]>();
+    for (const item of layout.items) {
+      if (item.container !== "workspace") continue;
+      const list = byScreen.get(item.screen) ?? [];
+      const label = item.title || item.package || item.component || `#${item.id}`;
+      list.push(`${label} (${item.cell_x},${item.cell_y} ${item.span_x}x${item.span_y})`);
+      byScreen.set(item.screen, list);
+    }
+    for (const [screen, items] of [...byScreen.entries()].sort((a, b) => a[0] - b[0])) {
+      sections.push(`- Screen ${screen + 1}: ${items.join(", ")}`);
+    }
+  }
+  return sections.join("\n");
 }
 
 export function diffMarkdown(
