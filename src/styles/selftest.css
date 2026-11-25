@@ -953,71 +953,278 @@
 
 .selftest-launcher-chip {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--muted-foreground);
+  margin: 0;
 }
 
-.selftest-launcher-screens {
+.selftest-launcher-split {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: minmax(276px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 880px) {
+  .selftest-launcher-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.selftest-launcher-stage,
+.selftest-launcher-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.selftest-launcher-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.selftest-launcher-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.selftest-launcher-pill.is-active {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border-color: var(--brand);
+  font-weight: 600;
+}
+
+.selftest-launcher-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
+.selftest-launcher-phones {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
-.selftest-launcher-screen,
-.selftest-launcher-hotseat-wrap {
+.selftest-launcher-phones.is-multi {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.selftest-launcher-phone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  background: var(--surface-subtle, var(--panel));
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.selftest-launcher-phone-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  padding: 0 2px;
 }
 
 .selftest-launcher-screen-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 8px;
+  color: var(--muted-foreground);
+  margin-bottom: 6px;
 }
 
 .selftest-launcher-grid,
 .selftest-launcher-hotseat {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
-.selftest-launcher-cell {
+.selftest-launcher-slot {
+  border-radius: 8px;
+  border: 1px dashed var(--line);
+  background: rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+}
+
+.selftest-launcher-tile {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 6px;
-  border-radius: 6px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--bg);
-  font-size: 11px;
+  background: var(--card);
+  color: var(--card-foreground);
+  font-size: 10px;
   min-width: 0;
+  cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.12s ease;
 }
 
-.selftest-launcher-cell.is-widget {
+.selftest-launcher-tile:hover {
   border-color: var(--brand);
 }
 
-.selftest-launcher-cell.is-folder {
+.selftest-launcher-tile.is-selected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--secondary-strong);
+}
+
+.selftest-launcher-tile.is-widget {
+  background: var(--secondary);
+  border-color: var(--brand-soft);
+}
+
+.selftest-launcher-tile.is-folder {
   border-style: dashed;
 }
 
-.selftest-launcher-cell.is-gemini {
+.selftest-launcher-tile.is-gemini {
   border-color: var(--brand);
   box-shadow: 0 0 0 1px var(--brand);
 }
 
-.selftest-launcher-cell-title {
+.selftest-launcher-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.selftest-launcher-icon.is-gemini {
+  background: var(--brand);
+  color: var(--primary-foreground);
+}
+
+.selftest-launcher-folder-mini {
+  display: grid;
+  grid-template-columns: repeat(2, 11px);
+  gap: 2px;
+}
+
+.selftest-launcher-folder-mini span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--muted);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.selftest-launcher-tile-title {
+  width: 100%;
+  text-align: center;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.selftest-launcher-cell-type {
-  color: var(--muted);
-  font-size: 10px;
+.selftest-launcher-tile-meta {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 9px;
+  color: var(--muted-foreground);
+}
+
+.selftest-launcher-dock {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.selftest-launcher-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selftest-launcher-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.selftest-launcher-kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.selftest-launcher-kv dt {
+  color: var(--muted-foreground);
+}
+
+.selftest-launcher-kv dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.selftest-launcher-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.selftest-launcher-child-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.selftest-launcher-child-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.selftest-launcher-child-chip.is-gemini {
+  border-color: var(--brand);
+  background: var(--secondary);
+  font-weight: 600;
 }
 
 .selftest-launcher-table-wrap {
@@ -1032,23 +1239,34 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 260px;
+  gap: 2px;
+  max-height: 270px;
   overflow: auto;
   font-size: 12px;
 }
 
-.selftest-launcher-list li {
+.selftest-launcher-row {
+  width: 100%;
+  text-align: left;
   display: grid;
-  grid-template-columns: 160px minmax(110px, 1fr) minmax(140px, 2fr);
+  grid-template-columns: 116px minmax(96px, 1fr) minmax(120px, 1.5fr);
   gap: 8px;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--border);
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.selftest-launcher-row:hover,
+.selftest-launcher-row.is-selected {
+  background: var(--secondary);
 }
 
 .selftest-launcher-item-pos,
 .selftest-launcher-item-comp {
-  color: var(--muted);
+  color: var(--muted-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

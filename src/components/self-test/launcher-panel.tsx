@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, LayoutGrid, RefreshCw } from "lucide-react";
+import { Copy, Folder, LayoutGrid, RefreshCw, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,14 @@ import { copyText } from "../../clipboard";
 
 function itemLabel(item: LauncherItem): string {
   if (item.title) return item.title;
-  if (item.package) return item.package;
+  if (item.package) return item.package.split(".").pop() || item.package;
   if (item.component) return item.component;
   return `#${item.id}`;
+}
+
+function itemMonogram(item: LauncherItem): string {
+  const label = itemLabel(item).trim();
+  return label ? label.slice(0, 1).toUpperCase() : "?";
 }
 
 function isGeminiItem(item: LauncherItem): boolean {
@@ -20,6 +25,10 @@ function isGeminiItem(item: LauncherItem): boolean {
     item.component.toLowerCase().includes("com.google.android.apps.bard") ||
     item.title.trim().toLowerCase() === "gemini"
   );
+}
+
+function itemKey(item: LauncherItem): string {
+  return `${item.container}:${item.id}:${item.screen}:${item.cell_x}:${item.cell_y}`;
 }
 
 export function LauncherLayoutPanel({
@@ -37,6 +46,8 @@ export function LauncherLayoutPanel({
 }) {
   const { t } = useTranslation();
   const [filter, setFilter] = useState("");
+  const [activeScreen, setActiveScreen] = useState<number | "all">(0);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const screens = useMemo(() => {
     if (!layout) return [];
@@ -85,11 +96,14 @@ export function LauncherLayoutPanel({
     if (!layout || !layout.items.length) return null;
     for (const item of layout.items) {
       if (!isGeminiItem(item)) continue;
-      if (item.container === "hotseat") return { ok: true, screen: "Hotseat" };
+      if (item.container === "hotseat") {
+        return { ok: true, screen: "Hotseat", screenIndex: null as number | null };
+      }
       if (item.container === "workspace") {
         return {
           ok: item.screen === 0 || item.screen === 1,
           screen: String(item.screen + 1),
+          screenIndex: item.screen,
         };
       }
       if (item.container === "folder" && item.folder_id) {
@@ -104,12 +118,18 @@ export function LauncherLayoutPanel({
               parent.container === "hotseat"
                 ? "Hotseat"
                 : String(parent.screen + 1),
+            screenIndex: parent.container === "workspace" ? parent.screen : null,
           };
         }
       }
     }
-    return { ok: false, screen: null };
+    return { ok: false, screen: null, screenIndex: null as number | null };
   }, [layout]);
+
+  const selectedItem = useMemo(() => {
+    if (!layout || !selectedKey) return null;
+    return layout.items.find((item) => itemKey(item) === selectedKey) ?? null;
+  }, [layout, selectedKey]);
 
   const filteredItems = useMemo(() => {
     const items = layout?.items ?? [];
@@ -122,6 +142,37 @@ export function LauncherLayoutPanel({
         .includes(q),
     );
   }, [layout, filter]);
+
+  const visibleScreens = useMemo(() => {
+    if (activeScreen === "all") return screens;
+    const found = screens.find(([idx]) => idx === activeScreen);
+    return found ? [found] : screens.slice(0, 1);
+  }, [screens, activeScreen]);
+
+  const emptySlots = useMemo(() => {
+    if (!layout) return [];
+    const cols = Math.max(1, layout.grid_columns);
+    const rows = Math.max(1, layout.grid_rows);
+    const slots: Array<{ x: number; y: number }> = [];
+    for (let y = 0; y < rows; y += 1) {
+      for (let x = 0; x < cols; x += 1) {
+        slots.push({ x, y });
+      }
+    }
+    return slots;
+  }, [layout]);
+
+  const selectItem = (item: LauncherItem) => {
+    setSelectedKey(itemKey(item));
+    if (item.container === "workspace") {
+      setActiveScreen(item.screen);
+    } else if (item.container === "folder" && item.folder_id && layout) {
+      const parent = layout.items.find((p) => p.id === item.folder_id);
+      if (parent && parent.container === "workspace") {
+        setActiveScreen(parent.screen);
+      }
+    }
+  };
 
   return (
     <div
@@ -141,6 +192,7 @@ export function LauncherLayoutPanel({
           </Badge>
           {geminiPlacement ? (
             <Badge variant={geminiPlacement.ok ? "outline" : "secondary"}>
+              <Sparkles size={11} aria-hidden="true" />
               {geminiPlacement.ok && geminiPlacement.screen
                 ? t("selftest.launcher.geminiBadgeOk", {
                     screen: geminiPlacement.screen,
@@ -156,11 +208,8 @@ export function LauncherLayoutPanel({
           {layout?.display_size ? (
             <span className="selftest-launcher-chip">
               {layout.display_size}
-              {layout.display_density ? ` @ ${layout.display_density}dpi` : ""}
+              {layout.display_density ? ` · ${layout.display_density}dpi` : ""}
             </span>
-          ) : null}
-          {layout?.source ? (
-            <span className="selftest-launcher-chip">{layout.source}</span>
           ) : null}
         </div>
         <div className="selftest-launcher-actions">
@@ -205,128 +254,306 @@ export function LauncherLayoutPanel({
             <p className="selftest-empty-note">{layout.notes.join(" ")}</p>
           ) : null}
 
-          {screens.length > 0 ? (
-            <div className="selftest-launcher-screens">
-              {screens.map(([screen, items]) => (
-                <div key={screen} className="selftest-launcher-screen">
-                  <div className="selftest-launcher-screen-title">
-                    {t("selftest.launcher.screen", { index: screen + 1 })}
-                  </div>
-                  <div
-                    className="selftest-launcher-grid"
-                    style={{
-                      gridTemplateColumns: `repeat(${Math.max(1, layout.grid_columns)}, minmax(0, 1fr))`,
-                      gridTemplateRows: `repeat(${Math.max(1, layout.grid_rows)}, minmax(38px, auto))`,
-                    }}
-                  >
-                    {items.map((item) => (
-                      <div
-                        key={`${item.id}-${item.cell_x}-${item.cell_y}`}
-                        className={`selftest-launcher-cell is-${item.item_type}${isGeminiItem(item) ? " is-gemini" : ""}`}
-                        style={{
-                          gridColumn: `${Math.max(1, item.cell_x + 1)} / span ${Math.max(1, item.span_x)}`,
-                          gridRow: `${Math.max(1, item.cell_y + 1)} / span ${Math.max(1, item.span_y)}`,
-                        }}
-                        title={item.component || item.package || item.title}
+          <div className="selftest-launcher-split">
+            <div className="selftest-launcher-stage">
+              {screens.length > 1 ? (
+                <div className="selftest-launcher-tabs" role="tablist">
+                  {screens.map(([screen]) => {
+                    const isCurrent =
+                      activeScreen === screen ||
+                      (activeScreen === 0 &&
+                        !screens.some(([idx]) => idx === 0) &&
+                        screen === screens[0]?.[0]);
+                    const hasGemini = geminiPlacement?.screenIndex === screen;
+                    return (
+                      <button
+                        key={`switch-${screen}`}
+                        type="button"
+                        className={`selftest-launcher-pill${isCurrent ? " is-active" : ""}`}
+                        onClick={() => setActiveScreen(screen)}
                       >
-                        <span className="selftest-launcher-cell-title">
-                          {itemLabel(item)}
-                        </span>
-                        <span className="selftest-launcher-cell-type">
-                          {item.item_type === "folder"
-                            ? `folder (${folders.byId.get(item.id)?.length ?? 0})`
-                            : item.item_type}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {hotseatItems.length > 0 ? (
-            <div className="selftest-launcher-hotseat-wrap">
-              <div className="selftest-launcher-screen-title">
-                {t("selftest.launcher.hotseat")}
-              </div>
-              <div
-                className="selftest-launcher-hotseat"
-                style={{
-                  gridTemplateColumns: `repeat(${Math.max(1, layout.hotseat_count, hotseatItems.length)}, minmax(0, 1fr))`,
-                }}
-              >
-                {hotseatItems.map((item) => (
-                  <div
-                    key={`${item.id}-hotseat-${item.cell_x}`}
-                    className={`selftest-launcher-cell is-${item.item_type}`}
-                    title={item.component || item.package || item.title}
+                        {t("selftest.launcher.screen", { index: screen + 1 })}
+                        {hasGemini ? (
+                          <span className="selftest-launcher-dot" aria-hidden="true" />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className={`selftest-launcher-pill${activeScreen === "all" ? " is-active" : ""}`}
+                    onClick={() => setActiveScreen("all")}
                   >
-                    <span className="selftest-launcher-cell-title">
-                      {itemLabel(item)}
-                    </span>
-                    <span className="selftest-launcher-cell-type">
-                      #{item.cell_x}
-                    </span>
+                    {t("selftest.launcher.allScreens")}
+                  </button>
+                </div>
+              ) : null}
+
+              <div
+                className={`selftest-launcher-phones${activeScreen === "all" ? " is-multi" : ""}`}
+              >
+                {visibleScreens.map(([screen, items]) => (
+                  <div key={screen} className="selftest-launcher-phone">
+                    <div className="selftest-launcher-phone-head">
+                      <span>{t("selftest.launcher.screen", { index: screen + 1 })}</span>
+                      <span>
+                        {layout.grid_columns}×{layout.grid_rows}
+                      </span>
+                    </div>
+
+                    <div
+                      className="selftest-launcher-grid"
+                      style={{
+                        gridTemplateColumns: `repeat(${Math.max(1, layout.grid_columns)}, minmax(0, 1fr))`,
+                        gridTemplateRows: `repeat(${Math.max(1, layout.grid_rows)}, 54px)`,
+                      }}
+                    >
+                      {emptySlots.map((slot) => (
+                        <div
+                          key={`slot-${screen}-${slot.x}-${slot.y}`}
+                          className="selftest-launcher-slot"
+                          style={{
+                            gridColumn: `${slot.x + 1} / span 1`,
+                            gridRow: `${slot.y + 1} / span 1`,
+                          }}
+                          aria-hidden="true"
+                        />
+                      ))}
+
+                      {items.map((item) => {
+                        const key = itemKey(item);
+                        const selected = selectedKey === key;
+                        const gemini = isGeminiItem(item);
+                        const children =
+                          item.item_type === "folder"
+                            ? (folders.byId.get(item.id) ?? [])
+                            : [];
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`selftest-launcher-tile is-${item.item_type}${gemini ? " is-gemini" : ""}${selected ? " is-selected" : ""}`}
+                            style={{
+                              gridColumn: `${Math.max(1, item.cell_x + 1)} / span ${Math.max(1, item.span_x)}`,
+                              gridRow: `${Math.max(1, item.cell_y + 1)} / span ${Math.max(1, item.span_y)}`,
+                            }}
+                            title={`${itemLabel(item)} (${item.cell_x},${item.cell_y})`}
+                            onClick={() => selectItem(item)}
+                          >
+                            {item.item_type === "folder" ? (
+                              <span className="selftest-launcher-folder-mini">
+                                {children.slice(0, 4).map((child) => (
+                                  <span key={itemKey(child)}>
+                                    {itemMonogram(child)}
+                                  </span>
+                                ))}
+                              </span>
+                            ) : (
+                              <span
+                                className={`selftest-launcher-icon${gemini ? " is-gemini" : ""}`}
+                              >
+                                {gemini ? (
+                                  <Sparkles size={12} aria-hidden="true" />
+                                ) : (
+                                  itemMonogram(item)
+                                )}
+                              </span>
+                            )}
+                            <span className="selftest-launcher-tile-title">
+                              {itemLabel(item)}
+                            </span>
+                            {item.item_type === "widget" ? (
+                              <span className="selftest-launcher-tile-meta">
+                                {item.span_x}×{item.span_y}
+                              </span>
+                            ) : item.item_type === "folder" ? (
+                              <span className="selftest-launcher-tile-meta">
+                                {children.length}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {hotseatItems.length > 0 ? (
+                      <div className="selftest-launcher-dock">
+                        <div
+                          className="selftest-launcher-hotseat"
+                          style={{
+                            gridTemplateColumns: `repeat(${Math.max(1, layout.hotseat_count, hotseatItems.length)}, minmax(0, 1fr))`,
+                          }}
+                        >
+                          {hotseatItems.map((item) => {
+                            const key = itemKey(item);
+                            const selected = selectedKey === key;
+                            const gemini = isGeminiItem(item);
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                className={`selftest-launcher-tile is-hotseat${gemini ? " is-gemini" : ""}${selected ? " is-selected" : ""}`}
+                                title={itemLabel(item)}
+                                onClick={() => selectItem(item)}
+                              >
+                                <span
+                                  className={`selftest-launcher-icon${gemini ? " is-gemini" : ""}`}
+                                >
+                                  {gemini ? (
+                                    <Sparkles size={12} aria-hidden="true" />
+                                  ) : (
+                                    itemMonogram(item)
+                                  )}
+                                </span>
+                                <span className="selftest-launcher-tile-title">
+                                  {itemLabel(item)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
             </div>
-          ) : null}
 
-          {folders.headers.length > 0 ? (
-            <div className="selftest-launcher-hotseat-wrap">
-              <div className="selftest-launcher-screen-title">
-                {t("selftest.launcher.folders", {
-                  count: folders.headers.length,
-                })}
+            <div className="selftest-launcher-inspector">
+              {selectedItem ? (
+                <div className="selftest-launcher-card">
+                  <div className="selftest-launcher-card-head">
+                    <div>
+                      <strong>{itemLabel(selectedItem)}</strong>
+                      <div className="selftest-launcher-chip">
+                        {selectedItem.item_type} · {selectedItem.container}
+                      </div>
+                    </div>
+                    {selectedItem.component ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          void copyText(selectedItem.component);
+                          onCopied();
+                        }}
+                      >
+                        <Copy size={12} aria-hidden="true" />
+                      </Button>
+                    ) : null}
+                  </div>
+                  <dl className="selftest-launcher-kv">
+                    <dt>{t("selftest.launcher.position")}</dt>
+                    <dd>
+                      {selectedItem.container === "workspace"
+                        ? `${t("selftest.launcher.screen", { index: selectedItem.screen + 1 })} (${selectedItem.cell_x},${selectedItem.cell_y}) · ${selectedItem.span_x}×${selectedItem.span_y}`
+                        : selectedItem.container === "hotseat"
+                          ? `${t("selftest.launcher.hotseat")} #${selectedItem.cell_x + 1}`
+                          : `#${selectedItem.folder_id ?? "-"} (${selectedItem.cell_x},${selectedItem.cell_y})`}
+                    </dd>
+                    {selectedItem.component || selectedItem.package ? (
+                      <>
+                        <dt>{t("selftest.launcher.component")}</dt>
+                        <dd className="selftest-launcher-mono">
+                          {selectedItem.component || selectedItem.package}
+                        </dd>
+                      </>
+                    ) : null}
+                  </dl>
+                  {selectedItem.item_type === "folder" ? (
+                    <div className="selftest-launcher-folder-children">
+                      <div className="selftest-launcher-screen-title">
+                        {t("selftest.launcher.folderItems", {
+                          count: (folders.byId.get(selectedItem.id) ?? []).length,
+                        })}
+                      </div>
+                      <div className="selftest-launcher-child-chips">
+                        {(folders.byId.get(selectedItem.id) ?? []).map(
+                          (child, idx) => (
+                            <button
+                              key={itemKey(child)}
+                              type="button"
+                              className={`selftest-launcher-child-chip${isGeminiItem(child) ? " is-gemini" : ""}`}
+                              onClick={() => selectItem(child)}
+                            >
+                              <span>{idx + 1}.</span>
+                              <span>{itemLabel(child)}</span>
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="selftest-launcher-card">
+                  <p className="selftest-launcher-chip">
+                    {t("selftest.launcher.inspectorHint")}
+                  </p>
+                  {folders.headers.length > 0 ? (
+                    <div className="selftest-launcher-folder-children">
+                      <div className="selftest-launcher-screen-title">
+                        {t("selftest.launcher.folders", {
+                          count: folders.headers.length,
+                        })}
+                      </div>
+                      <div className="selftest-launcher-child-chips">
+                        {folders.headers.map((folder) => (
+                          <button
+                            key={itemKey(folder)}
+                            type="button"
+                            className="selftest-launcher-child-chip"
+                            onClick={() => selectItem(folder)}
+                          >
+                            <Folder size={12} aria-hidden="true" />
+                            <span>{itemLabel(folder)}</span>
+                            <span>
+                              ({(folders.byId.get(folder.id) ?? []).length})
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <div className="selftest-launcher-table-wrap">
+                <Input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder={t("selftest.launcher.filterPlaceholder")}
+                  aria-label={t("selftest.launcher.filterPlaceholder")}
+                />
+                <ul className="selftest-launcher-list">
+                  {filteredItems.map((item) => {
+                    const key = itemKey(item);
+                    return (
+                      <li key={key}>
+                        <button
+                          type="button"
+                          className={`selftest-launcher-row${selectedKey === key ? " is-selected" : ""}`}
+                          onClick={() => selectItem(item)}
+                        >
+                          <span className="selftest-launcher-item-pos">
+                            {item.container === "workspace"
+                              ? `S${item.screen + 1} (${item.cell_x},${item.cell_y})`
+                              : item.container === "hotseat"
+                                ? `Dock #${item.cell_x + 1}`
+                                : `Folder #${item.folder_id ?? "-"}`}
+                          </span>
+                          <strong>{itemLabel(item)}</strong>
+                          <span className="selftest-launcher-item-comp">
+                            {item.package || item.component}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <ul className="selftest-launcher-list">
-                {folders.headers.map((folder) => {
-                  const children = folders.byId.get(folder.id) ?? [];
-                  return (
-                    <li key={`folder-${folder.id}`}>
-                      <span className="selftest-launcher-item-pos">
-                        S{folder.screen + 1} ({folder.cell_x},{folder.cell_y})
-                      </span>
-                      <strong>{itemLabel(folder)}</strong>
-                      <span className="selftest-launcher-item-comp">
-                        {children.map((c) => itemLabel(c)).join(", ")}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
             </div>
-          ) : null}
-
-          <div className="selftest-launcher-table-wrap">
-            <Input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder={t("selftest.launcher.filterPlaceholder")}
-              aria-label={t("selftest.launcher.filterPlaceholder")}
-            />
-            <ul className="selftest-launcher-list">
-              {filteredItems.map((item) => (
-                <li key={`${item.container}-${item.id}-${item.screen}-${item.cell_x}-${item.cell_y}`}>
-                  <span className="selftest-launcher-item-pos">
-                    {item.container}
-                    {item.container === "workspace"
-                      ? ` S${item.screen + 1} (${item.cell_x},${item.cell_y}) ${item.span_x}×${item.span_y}`
-                      : item.container === "hotseat"
-                        ? ` #${item.cell_x}`
-                        : item.folder_id
-                          ? ` #${item.folder_id}`
-                          : ""}
-                  </span>
-                  <strong>{itemLabel(item)}</strong>
-                  <span className="selftest-launcher-item-comp">
-                    {item.component || item.package}
-                  </span>
-                </li>
-              ))}
-            </ul>
           </div>
         </>
       )}
