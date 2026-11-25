@@ -18,7 +18,7 @@ const EXIT_USAGE: u8 = 5;
 #[derive(Parser)]
 #[command(
     name = "spm-selftest-cli",
-    version,
+    version = env!("SELFTEST_DISPLAY_VERSION"),
     about = "SPM Android device self-test: capture, list, diff, rename and export"
 )]
 struct Cli {

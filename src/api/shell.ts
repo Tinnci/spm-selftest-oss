@@ -20,6 +20,8 @@ export function revealPath(path: string) {
   return revealItemInDir(path);
 }
 
-export function appVersion(): Promise<string> {
-  return isTauri() ? getVersion() : Promise.resolve(__APP_VERSION__);
+export async function appVersion(): Promise<string> {
+  const base = isTauri() ? await getVersion() : __APP_VERSION__;
+  const build = typeof __APP_GIT_BUILD__ === "string" ? __APP_GIT_BUILD__ : "";
+  return build ? `${base} (${build})` : base;
 }
