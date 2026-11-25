@@ -342,6 +342,7 @@ mod tests {
             drm_sections: vec![],
             packages: vec![],
             features: vec![],
+            launcher_layout: None,
             checks: vec![],
             review: crate::review::ReviewLedger::default(),
             artifacts: crate::review::Artifacts::default(),

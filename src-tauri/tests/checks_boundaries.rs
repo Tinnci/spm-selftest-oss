@@ -45,6 +45,7 @@ fn record(test_type: &str) -> SelfTestRecord {
         drm_sections: Vec::new(),
         packages: Vec::new(),
         features: Vec::new(),
+        launcher_layout: None,
         review: ReviewLedger::default(),
         artifacts: Artifacts::default(),
     }

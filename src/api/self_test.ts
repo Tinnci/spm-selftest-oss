@@ -22,6 +22,35 @@ export type DrmSection = {
   lines: string[];
 };
 
+export type LauncherItem = {
+  id: string;
+  container: string;
+  folder_id?: string | null;
+  screen: number;
+  cell_x: number;
+  cell_y: number;
+  span_x: number;
+  span_y: number;
+  item_type: string;
+  title: string;
+  package: string;
+  component: string;
+};
+
+export type LauncherLayout = {
+  collected_at: string;
+  default_launcher: string;
+  launcher_package: string;
+  display_size: string;
+  display_density: string;
+  grid_columns: number;
+  grid_rows: number;
+  hotseat_count: number;
+  source: string;
+  items: LauncherItem[];
+  notes: string[];
+};
+
 export type SelfTestVerdict = "pending" | "pass" | "fail";
 export type CheckLevel = "pass" | "warn" | "error";
 export type CheckStatus = "pass" | "warn" | "error" | "unknown";
@@ -130,6 +159,7 @@ export type SelfTestRecord = {
   drm_sections: DrmSection[];
   packages: string[];
   features: string[];
+  launcher_layout?: LauncherLayout | null;
   review?: ReviewLedger;
   artifacts?: Artifacts;
 };
@@ -228,6 +258,16 @@ export function selfTestRun(input: {
 
 export function selfTestList(): Promise<SelfTestSummary[]> {
   return call<SelfTestSummary[]>("self_test_list", {});
+}
+
+export function selfTestLauncherLayout(
+  serial: string,
+  adbPath?: string,
+): Promise<LauncherLayout> {
+  return call<LauncherLayout>("self_test_launcher_layout", {
+    adbPath: adbPath?.trim() || null,
+    serial,
+  });
 }
 
 export function selfTestGet(id: string): Promise<SelfTestRecord> {

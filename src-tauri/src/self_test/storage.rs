@@ -397,6 +397,7 @@ pub fn save_record_internal(rec: &SelfTestRecord) -> Result<(), SelfTestError> {
         features_hash,
         packages: Vec::new(),
         features: Vec::new(),
+        launcher_layout: rec.launcher_layout.clone(),
         review: rec.review.clone(),
         artifacts: rec.artifacts.clone(),
     };

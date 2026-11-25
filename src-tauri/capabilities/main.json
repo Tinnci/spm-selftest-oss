@@ -15,6 +15,7 @@
     "core:window:allow-is-maximized",
     "allow-self-test-env",
     "allow-self-test-run",
+    "allow-self-test-launcher-layout",
     "allow-self-test-list",
     "allow-self-test-get",
     "allow-self-test-update-meta",

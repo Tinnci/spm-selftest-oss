@@ -4,9 +4,9 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use spm_selftest::self_test::{
     SelfTestError, SelfTestRecord, XlsxOptions, compute_diff, encode_text, render_csv_ledger,
-    render_markdown_report, review_plan_for, self_test_env, self_test_get, self_test_list,
-    self_test_rename, self_test_run, summary_of, write_txt4_bundle, write_xlsx_report,
-    xlsx_file_name,
+    render_markdown_report, review_plan_for, self_test_env, self_test_get,
+    self_test_launcher_layout, self_test_list, self_test_rename, self_test_run, summary_of,
+    write_txt4_bundle, write_xlsx_report, xlsx_file_name,
 };
 
 const EXIT_OK: u8 = 0;
@@ -99,6 +99,14 @@ enum Commands {
         locale: Option<String>,
         #[arg(long)]
         force: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    Launcher {
+        #[arg(long)]
+        serial: String,
+        #[arg(long)]
+        adb: Option<String>,
         #[arg(long)]
         json: bool,
     },
@@ -497,6 +505,28 @@ fn run() -> ExitCode {
                     }
                 }
                 Err(error) => fail(error, EXIT_USAGE),
+            }
+        }
+        Commands::Launcher { serial, adb, json } => {
+            let result = runtime.block_on(self_test_launcher_layout(adb, serial));
+            match result {
+                Ok(layout) => {
+                    if json {
+                        print_json(&layout)
+                    } else {
+                        println!(
+                            "launcher={} ({}x{}, hotseat={}, source={})",
+                            layout.launcher_package,
+                            layout.grid_columns,
+                            layout.grid_rows,
+                            layout.hotseat_count,
+                            layout.source
+                        );
+                        println!("items={}", layout.items.len());
+                        ExitCode::from(EXIT_OK)
+                    }
+                }
+                Err(error) => fail(error, EXIT_CAPTURE),
             }
         }
     }

@@ -8,11 +8,13 @@ mod adb;
 mod collector;
 mod diff;
 mod exporter;
+mod launcher;
 mod storage;
 pub use adb::*;
 pub use collector::*;
 pub use diff::*;
 pub use exporter::*;
+pub use launcher::*;
 pub use storage::*;
 
 const ADB_TIMEOUT_SECS: u64 = 20;
@@ -106,6 +108,8 @@ pub struct SelfTestRecord {
     pub drm_sections: Vec<DrmSection>,
     pub packages: Vec<String>,
     pub features: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launcher_layout: Option<LauncherLayout>,
     #[serde(default)]
     pub review: ReviewLedger,
     #[serde(default)]
@@ -164,6 +168,8 @@ struct StoredSelfTestRecord {
     pub packages: Vec<String>,
     #[serde(default)]
     pub features: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launcher_layout: Option<LauncherLayout>,
     #[serde(default)]
     pub review: ReviewLedger,
     #[serde(default)]
@@ -329,6 +335,7 @@ fn load_record_raw(id: &str) -> Result<SelfTestRecord, SelfTestError> {
         drm_sections: stored.drm_sections,
         packages,
         features,
+        launcher_layout: stored.launcher_layout,
         review: stored.review,
         artifacts: stored.artifacts,
     })
@@ -535,6 +542,8 @@ pub async fn self_test_run(
         }
     }
 
+    let launcher_layout = Some(collect_launcher_layout(&adb, &serial).await);
+
     let now = chrono::Local::now();
     let id = now.format("%Y%m%d-%H%M%S-%3f").to_string();
     let collected_at = now.to_rfc3339();
@@ -565,6 +574,7 @@ pub async fn self_test_run(
         drm_sections,
         packages,
         features,
+        launcher_layout,
         review: ReviewLedger::default(),
         artifacts: Artifacts::default(),
     };
@@ -580,6 +590,20 @@ pub async fn self_test_run(
     index.insert(0, summary_of(&record));
     write_index(&index)?;
     Ok(record)
+}
+
+#[tauri::command]
+pub async fn self_test_launcher_layout(
+    adb_path: Option<String>,
+    serial: String,
+) -> Result<LauncherLayout, SelfTestError> {
+    let serial = serial.trim().to_owned();
+    if serial.is_empty() {
+        return Err(SelfTestError::new("collect_failed"));
+    }
+    let adb =
+        resolve_adb_path(adb_path.as_deref()).ok_or_else(|| SelfTestError::new("adb_missing"))?;
+    Ok(collect_launcher_layout(&adb, &serial).await)
 }
 
 #[tauri::command]
@@ -1016,6 +1040,7 @@ mod tests {
             }],
             packages: vec!["com.a".into()],
             features: vec!["android.hardware.drm".into()],
+            launcher_layout: None,
             review: ReviewLedger::default(),
             artifacts: Artifacts::default(),
         }

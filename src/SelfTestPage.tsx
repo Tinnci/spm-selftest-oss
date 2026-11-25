@@ -11,6 +11,7 @@ import {
   FileText,
   GitCompare,
   Inbox,
+  LayoutGrid,
   Mail,
   MoreHorizontal,
   RefreshCw,
@@ -51,6 +52,7 @@ import { CollectionDialog } from "./components/self-test/collection-dialog";
 import { Field } from "./components/self-test/field";
 import { ChecksPanel } from "./components/self-test/checks-panel";
 import { DiffPanel } from "./components/self-test/diff-panel";
+import { LauncherLayoutPanel } from "./components/self-test/launcher-panel";
 import { RecordSidebar } from "./components/self-test/record-sidebar";
 import { useSelfTestCollection } from "./hooks/useSelfTestCollection";
 import { copyText } from "./clipboard";
@@ -60,11 +62,13 @@ import {
   selfTestDiff,
   selfTestExportFile,
   selfTestGet,
+  selfTestLauncherLayout,
   selfTestList,
   selfTestRecheck,
   selfTestReviewPlan,
   selfTestUpdateMeta,
   type ExportEncoding,
+  type LauncherLayout,
   type SelfTestCheck,
   type SelfTestDiff,
   type SelfTestExportFormat,
@@ -99,7 +103,7 @@ import { TEST_TYPES } from "./selftest/constants";
 import { localDate } from "./selftest/date";
 import { useRecordBrowser } from "./hooks/useRecordBrowser";
 
-type DetailTab = "gms" | "drm" | "packages" | "features" | "diff";
+type DetailTab = "gms" | "drm" | "packages" | "features" | "launcher" | "diff";
 
 const CHECK_FIELD: Record<string, string> = {
   patch_format: "patch",
@@ -211,6 +215,8 @@ export function SelfTestPage({
   const [editPatchValidDays, setEditPatchValidDays] = useState(90);
   const [savingMeta, setSavingMeta] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [liveLauncher, setLiveLauncher] = useState<LauncherLayout | null>(null);
+  const [inspectingLauncher, setInspectingLauncher] = useState(false);
 
   const [compareId, setCompareId] = useState("");
   const [diff, setDiff] = useState<SelfTestDiff | null>(null);
@@ -307,6 +313,24 @@ export function SelfTestPage({
     const title = recordTitleRef.current;
     title?.scrollIntoView?.({ block: "nearest" });
     return title ?? true;
+  };
+
+  const activeLauncherLayout = liveLauncher ?? detail?.launcher_layout ?? null;
+  const handleInspectLauncher = async () => {
+    if (!collection.adb.serial || inspectingLauncher) return;
+    setInspectingLauncher(true);
+    try {
+      const next = await selfTestLauncherLayout(
+        collection.adb.serial,
+        collection.adb.adbPath,
+      );
+      setLiveLauncher(next);
+      toast.show(t("selftest.tab.launcher", { count: next.items.length }));
+    } catch (err) {
+      toast.show(errorText(err));
+    } finally {
+      setInspectingLauncher(false);
+    }
   };
 
   useEffect(() => {
@@ -1490,6 +1514,21 @@ export function SelfTestPage({
                 count: detail.features.length,
               })}
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="selftest-tab-launcher"
+              aria-controls="selftest-panel-launcher"
+              aria-selected={detailTab === "launcher"}
+              tabIndex={detailTab === "launcher" ? 0 : -1}
+              className={detailTab === "launcher" ? "is-active" : ""}
+              onClick={() => setDetailTab("launcher")}
+            >
+              <LayoutGrid size={13} aria-hidden="true" />
+              {t("selftest.tab.launcher", {
+                count: activeLauncherLayout?.items.length ?? 0,
+              })}
+            </button>
             {records.length > 1 ? (
               <button
                 type="button"
@@ -1649,6 +1688,16 @@ export function SelfTestPage({
               shownFeatsSame={shownFeatsSame}
               handleSwapDiff={() => void handleSwapDiff()}
               handleCopyDiffMarkdown={handleCopyDiffMarkdown}
+            />
+          ) : null}
+
+          {detailTab === "launcher" ? (
+            <LauncherLayoutPanel
+              layout={activeLauncherLayout}
+              serial={collection.adb.serial}
+              inspecting={inspectingLauncher}
+              onInspectLive={handleInspectLauncher}
+              onCopied={() => toast.show(t("common.copied"))}
             />
           ) : null}
         </>

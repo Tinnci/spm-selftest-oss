@@ -5,6 +5,7 @@ fn main() {
             "install_desktop_update",
             "self_test_env",
             "self_test_run",
+            "self_test_launcher_layout",
             "self_test_list",
             "self_test_get",
             "self_test_update_meta",

@@ -928,3 +928,123 @@
     width: auto;
   }
 }
+
+.selftest-launcher-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selftest-launcher-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.selftest-launcher-summary,
+.selftest-launcher-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.selftest-launcher-chip {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.selftest-launcher-screens {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.selftest-launcher-screen,
+.selftest-launcher-hotseat-wrap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-subtle, var(--panel));
+}
+
+.selftest-launcher-screen-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.selftest-launcher-grid,
+.selftest-launcher-hotseat {
+  display: grid;
+  gap: 6px;
+}
+
+.selftest-launcher-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 11px;
+  min-width: 0;
+}
+
+.selftest-launcher-cell.is-widget {
+  border-color: var(--brand);
+}
+
+.selftest-launcher-cell.is-folder {
+  border-style: dashed;
+}
+
+.selftest-launcher-cell-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selftest-launcher-cell-type {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.selftest-launcher-table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selftest-launcher-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.selftest-launcher-list li {
+  display: grid;
+  grid-template-columns: 160px minmax(110px, 1fr) minmax(140px, 2fr);
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.selftest-launcher-item-pos,
+.selftest-launcher-item-comp {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
