@@ -50,6 +50,29 @@ export function LauncherLayoutPanel({
     [layout],
   );
 
+  const folders = useMemo(() => {
+    const items = layout?.items ?? [];
+    const byFolder = new Map<string, LauncherItem[]>();
+    for (const item of items) {
+      if (item.container !== "folder" || !item.folder_id) continue;
+      const list = byFolder.get(item.folder_id) ?? [];
+      list.push(item);
+      byFolder.set(item.folder_id, list);
+    }
+    for (const list of byFolder.values()) {
+      list.sort(
+        (a, b) =>
+          (a.rank ?? 0) - (b.rank ?? 0) ||
+          a.cell_y - b.cell_y ||
+          a.cell_x - b.cell_x,
+      );
+    }
+    return {
+      byId: byFolder,
+      headers: items.filter((i) => i.item_type === "folder"),
+    };
+  }, [layout]);
+
   const filteredItems = useMemo(() => {
     const items = layout?.items ?? [];
     const q = filter.trim().toLowerCase();
@@ -163,7 +186,9 @@ export function LauncherLayoutPanel({
                           {itemLabel(item)}
                         </span>
                         <span className="selftest-launcher-cell-type">
-                          {item.item_type}
+                          {item.item_type === "folder"
+                            ? `folder (${folders.byId.get(item.id)?.length ?? 0})`
+                            : item.item_type}
                         </span>
                       </div>
                     ))}
@@ -199,6 +224,30 @@ export function LauncherLayoutPanel({
                   </div>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {folders.headers.length > 0 ? (
+            <div className="selftest-launcher-hotseat-wrap">
+              <div className="selftest-launcher-screen-title">
+                Folders ({folders.headers.length})
+              </div>
+              <ul className="selftest-launcher-list">
+                {folders.headers.map((folder) => {
+                  const children = folders.byId.get(folder.id) ?? [];
+                  return (
+                    <li key={`folder-${folder.id}`}>
+                      <span className="selftest-launcher-item-pos">
+                        S{folder.screen + 1} ({folder.cell_x},{folder.cell_y})
+                      </span>
+                      <strong>{itemLabel(folder)}</strong>
+                      <span className="selftest-launcher-item-comp">
+                        {children.map((c) => itemLabel(c)).join(", ")}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           ) : null}
 

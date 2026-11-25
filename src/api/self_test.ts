@@ -31,6 +31,7 @@ export type LauncherItem = {
   cell_y: number;
   span_x: number;
   span_y: number;
+  rank?: number;
   item_type: string;
   title: string;
   package: string;

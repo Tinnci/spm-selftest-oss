@@ -13,6 +13,8 @@ pub struct LauncherItem {
     pub cell_y: i32,
     pub span_x: i32,
     pub span_y: i32,
+    #[serde(default)]
+    pub rank: i32,
     pub item_type: String,
     pub title: String,
     pub package: String,
@@ -150,20 +152,116 @@ fn classify_container(container_num: i32) -> (&'static str, Option<String>) {
     }
 }
 
+fn extract_colon_u32(line: &str, key: &str) -> Option<u32> {
+    let needle = format!("{key}:");
+    let pos = line.find(&needle)?;
+    let rest = line[pos + needle.len()..].trim();
+    rest.split_whitespace().next()?.parse::<u32>().ok()
+}
+
+fn extract_component_value(raw: &str) -> Option<String> {
+    if let Some(after) = raw.strip_prefix("ComponentInfo{") {
+        let end = after.find('}').unwrap_or(after.len());
+        let val = after[..end].trim();
+        return (!val.is_empty() && val != "null").then(|| val.to_owned());
+    }
+    let val = raw.trim();
+    (!val.is_empty() && val != "null").then(|| val.to_owned())
+}
+
+fn extract_title_value(line: &str) -> String {
+    let Some(pos) = line.find("title=") else {
+        return String::new();
+    };
+    let rest = &line[pos + 6..];
+    if let Some(after_quote) = rest.strip_prefix('"') {
+        let end = after_quote.find('"').unwrap_or(after_quote.len());
+        return after_quote[..end].trim().to_owned();
+    }
+    let mut end = rest.len();
+    for marker in [
+        " supportsMultiInstance=",
+        " nonResizeable=",
+        " providerName=",
+        " appWidgetId=",
+        " component=",
+        " screen=",
+        " cell(",
+        " span(",
+        ";",
+        ")",
+    ] {
+        if let Some(idx) = rest.find(marker) {
+            end = end.min(idx);
+        }
+    }
+    let val = rest[..end].trim();
+    if val == "null" {
+        String::new()
+    } else {
+        val.to_owned()
+    }
+}
+
+fn coalesce_launcher_records(raw: &str) -> Vec<String> {
+    let mut records = Vec::new();
+    let mut current: Option<String> = None;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.contains("ItemInfo(") {
+            if let Some(prev) = current.take() {
+                records.push(prev);
+            }
+            if trimmed.ends_with(')') {
+                records.push(trimmed.to_owned());
+            } else {
+                current = Some(trimmed.to_owned());
+            }
+            continue;
+        }
+        if let Some(buf) = current.as_mut() {
+            buf.push(' ');
+            buf.push_str(trimmed);
+            if trimmed.ends_with(')')
+                && (trimmed.contains("title=")
+                    || trimmed.contains("appWidgetId=")
+                    || trimmed.contains("labelState="))
+            {
+                records.push(current.take().unwrap());
+            }
+        } else {
+            records.push(trimmed.to_owned());
+        }
+    }
+    if let Some(tail) = current {
+        records.push(tail);
+    }
+    records
+}
+
 pub fn parse_dumpsys_launcher(raw: &str) -> (u32, u32, u32, Vec<LauncherItem>) {
     let mut cols: u32 = 0;
     let mut rows: u32 = 0;
     let mut hotseat: u32 = 0;
     let mut items = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut current_folder_id: Option<String> = None;
 
-    for line in raw.lines() {
+    for line in coalesce_launcher_records(raw) {
         let trimmed = line.trim();
-        if let Some(v) = extract_attr(trimmed, "numColumns").and_then(|s| s.parse::<u32>().ok())
+        if let Some(v) = extract_attr(trimmed, "numColumns")
+            .and_then(|s| s.parse::<u32>().ok())
+            .or_else(|| extract_colon_u32(trimmed, "inv.numColumns"))
             && v > 0
         {
             cols = cols.max(v);
         }
-        if let Some(v) = extract_attr(trimmed, "numRows").and_then(|s| s.parse::<u32>().ok())
+        if let Some(v) = extract_attr(trimmed, "numRows")
+            .and_then(|s| s.parse::<u32>().ok())
+            .or_else(|| extract_colon_u32(trimmed, "inv.numRows"))
             && v > 0
         {
             rows = rows.max(v);
@@ -175,14 +273,26 @@ pub fn parse_dumpsys_launcher(raw: &str) -> (u32, u32, u32, Vec<LauncherItem>) {
                 hotseat = hotseat.max(v);
             }
         }
+        if let Some(v) = extract_colon_u32(trimmed, "mHotSeatItemsCount")
+            && v > 0
+        {
+            hotseat = hotseat.max(v);
+        }
 
-        let item_type = if trimmed.contains("LauncherAppWidgetInfo") {
+        let item_type = if trimmed.contains("LauncherAppWidgetInfo")
+            || trimmed.contains("type=WIDGET")
+            || trimmed.contains("providerName=")
+        {
             "widget"
-        } else if trimmed.contains("FolderInfo") {
+        } else if trimmed.contains("FolderInfo")
+            || trimmed.contains("type=FOLDER")
+            || (trimmed.contains("targetComponent=null") && trimmed.contains("labelState="))
+        {
             "folder"
         } else if trimmed.contains("WorkspaceItemInfo")
             || trimmed.contains("ShortcutInfo")
             || trimmed.contains("AppInfo")
+            || trimmed.contains("ItemInfo(")
         {
             "app"
         } else {
@@ -192,13 +302,45 @@ pub fn parse_dumpsys_launcher(raw: &str) -> (u32, u32, u32, Vec<LauncherItem>) {
         let Some(id) = extract_attr(trimmed, "id") else {
             continue;
         };
-        let container_num = extract_attr(trimmed, "container")
-            .and_then(|v| v.parse::<i32>().ok())
-            .unwrap_or(-100);
-        let (container, folder_id) = classify_container(container_num);
+        if id == "-1"
+            || trimmed.contains("predicted_hotseat_container")
+            || trimmed.contains("prediction_container")
+        {
+            continue;
+        }
         let screen = extract_attr(trimmed, "screen")
             .and_then(|v| v.parse::<i32>().ok())
             .unwrap_or(0);
+        if screen < 0 {
+            continue;
+        }
+
+        let (container, folder_id) = if trimmed.contains("hotseat {") {
+            current_folder_id = None;
+            ("hotseat", None)
+        } else if trimmed.contains("folder {") {
+            let fid = current_folder_id.clone();
+            ("folder", fid)
+        } else if trimmed.contains("workspace {") {
+            if item_type == "folder" {
+                current_folder_id = Some(id.clone());
+            } else {
+                current_folder_id = None;
+            }
+            ("workspace", None)
+        } else if trimmed.contains("container=#") && current_folder_id.is_some() {
+            ("folder", current_folder_id.clone())
+        } else {
+            current_folder_id = None;
+            let container_num = extract_attr(trimmed, "container")
+                .and_then(|v| v.parse::<i32>().ok())
+                .unwrap_or(-100);
+            classify_container(container_num)
+        };
+        let rank = extract_attr(trimmed, "rank")
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(0);
+
         let (cell_x, cell_y) = extract_pair(trimmed, "cell").unwrap_or_else(|| {
             (
                 extract_attr(trimmed, "cellX")
@@ -219,15 +361,25 @@ pub fn parse_dumpsys_launcher(raw: &str) -> (u32, u32, u32, Vec<LauncherItem>) {
                     .unwrap_or(1),
             )
         });
-        let title = extract_attr(trimmed, "title").unwrap_or_default();
-        let component = extract_attr(trimmed, "component")
-            .or_else(|| extract_attr(trimmed, "providerName"))
+        let title = extract_title_value(trimmed);
+        let component = extract_attr(trimmed, "targetComponent")
+            .and_then(|v| extract_component_value(&v))
+            .or_else(|| {
+                extract_attr(trimmed, "component").and_then(|v| extract_component_value(&v))
+            })
+            .or_else(|| {
+                extract_attr(trimmed, "providerName").and_then(|v| extract_component_value(&v))
+            })
             .or_else(|| {
                 let cmp = component_from_intent(trimmed);
                 (!cmp.is_empty()).then_some(cmp)
             })
             .unwrap_or_default();
         let package = component.split('/').next().unwrap_or("").trim().to_owned();
+
+        if !seen.insert((container.to_owned(), id.clone())) {
+            continue;
+        }
 
         items.push(LauncherItem {
             id,
@@ -238,6 +390,7 @@ pub fn parse_dumpsys_launcher(raw: &str) -> (u32, u32, u32, Vec<LauncherItem>) {
             cell_y,
             span_x: span_x.max(1),
             span_y: span_y.max(1),
+            rank,
             item_type: item_type.to_owned(),
             title,
             package,
@@ -326,6 +479,7 @@ pub fn parse_content_favorites(raw: &str) -> Vec<LauncherItem> {
                 .parse::<i32>()
                 .unwrap_or(1)
                 .max(1),
+            rank: 0,
             item_type: item_type.to_owned(),
             title: parse_kv_segment(trimmed, "title"),
             package,
@@ -575,5 +729,43 @@ mod tests {
         assert_eq!(items[0].title, "Camera");
         assert_eq!(items[0].package, "com.android.camera2");
         assert_eq!((items[0].cell_x, items[0].cell_y), (2, 3));
+    }
+
+    #[test]
+    fn parses_multiline_android15_launcher3_dumpsys() {
+        let dump = r#"
+          DeviceProfile:
+            inv.numRows: 6
+            inv.numColumns: 4
+          mHotSeatItemsCount: 4
+          ItemInfo(id=5 type=WIDGET container=# com.android.launcher3.logger.LauncherAtom$ContainerInfo@1
+          workspace {
+            page_index: 0
+          } targetComponent=ComponentInfo{com.fuui.sys.widgets/.WeatherWidgetProvider} screen=0 cell(0,0) span(4,2) minSpan(4,2) rank=0 user=UserHandle{0} title=null providerName=ComponentInfo{com.fuui.sys.widgets/.WeatherWidgetProvider} appWidgetId=3)
+          ItemInfo(id=10 type=APP container=# com.android.launcher3.logger.LauncherAtom$ContainerInfo@2
+          hotseat {
+          } targetComponent=ComponentInfo{com.android.settings/.Settings} screen=0 cell(3,5) span(1,1) rank=0 user=UserHandle{0} title=Settings supportsMultiInstance=false)
+          ItemInfo(id=24 type=APP container=# com.android.launcher3.logger.LauncherAtom$ContainerInfo@4
+          workspace {
+            page_index: 1
+          } targetComponent=null screen=1 cell(2,0) span(2,2) rank=0 user=UserHandle{0} title=Tools; labelState=SUGGESTED)
+          ItemInfo(id=25 type=APP container=# com.android.launcher3.logger.LauncherAtom$ContainerInfo@5 targetComponent=ComponentInfo{com.android.soundrecorder/.SoundRecorder} screen=0 cell(0,0) span(1,1) rank=0 user=UserHandle{0} title=Sound Recorder supportsMultiInstance=false)
+          ItemInfo(id=-1 type=APP container=# com.android.launcher3.logger.LauncherAtom$ContainerInfo@3
+          predicted_hotseat_container {
+          } targetComponent=ComponentInfo{com.google.android.gm/.Gmail} screen=-1 cell(-1,-1) span(1,1) rank=0 user=UserHandle{0} title=Gmail supportsMultiInstance=false)
+        "#;
+        let (cols, rows, hotseat, items) = parse_dumpsys_launcher(dump);
+        assert_eq!((cols, rows, hotseat), (4, 6, 4));
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].item_type, "widget");
+        assert_eq!(items[0].package, "com.fuui.sys.widgets");
+        assert_eq!((items[0].span_x, items[0].span_y), (4, 2));
+        assert_eq!(items[1].container, "hotseat");
+        assert_eq!(items[1].title, "Settings");
+        assert_eq!(items[2].item_type, "folder");
+        assert_eq!(items[2].title, "Tools");
+        assert_eq!(items[3].container, "folder");
+        assert_eq!(items[3].folder_id.as_deref(), Some("24"));
+        assert_eq!(items[3].rank, 0);
     }
 }
