@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { LauncherItem, LauncherLayout } from "../../api/self_test";
-import { copyText } from "../../clipboard";
+import { useCopyWithToast } from "../../hooks/useCopyWithToast";
 
 function itemLabel(item: LauncherItem): string {
   if (item.title) return item.title;
@@ -42,9 +42,10 @@ export function LauncherLayoutPanel({
   serial: string;
   inspecting: boolean;
   onInspectLive: () => Promise<void>;
-  onCopied: () => void;
+  onCopied?: () => void;
 }) {
   const { t } = useTranslation();
+  const copyWithToast = useCopyWithToast();
   const [filter, setFilter] = useState("");
   const [activeScreen, setActiveScreen] = useState<number | "all">(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -240,8 +241,11 @@ export function LauncherLayoutPanel({
               variant="ghost"
               size="sm"
               onClick={() => {
-                void copyText(JSON.stringify(layout, null, 2));
-                onCopied();
+                void copyWithToast(JSON.stringify(layout, null, 2)).then(
+                  (ok) => {
+                    if (ok) onCopied?.();
+                  },
+                );
               }}
             >
               <Copy size={13} aria-hidden="true" />
@@ -445,8 +449,11 @@ export function LauncherLayoutPanel({
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          void copyText(selectedItem.component);
-                          onCopied();
+                          void copyWithToast(selectedItem.component).then(
+                            (ok) => {
+                              if (ok) onCopied?.();
+                            },
+                          );
                         }}
                       >
                         <Copy size={12} aria-hidden="true" />

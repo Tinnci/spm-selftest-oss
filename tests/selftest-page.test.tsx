@@ -368,29 +368,6 @@ describe("SelfTestPage", () => {
     expect(screen.getAllByText("UMS9230").length).toBeGreaterThan(0);
   });
 
-  it("previews the submission email before copying", async () => {
-    renderPage();
-    const user = userEvent.setup();
-    await screen.findByRole("heading", { name: "DEMO_IR_V14_20261119" });
-
-    await user.click(screen.getByRole("button", { name: "提测邮件" }));
-    expect(
-      await screen.findByRole("heading", { name: "确认生成提测邮件" }),
-    ).toBeTruthy();
-    await user.click(
-      screen.getByText(
-        "我已确认核对结果、差异项与交付物无误，可以生成提测邮件。",
-      ),
-    );
-    await user.click(screen.getByRole("button", { name: "生成提测邮件" }));
-    expect(
-      await screen.findByRole("heading", { name: "提测邮件预览" }),
-    ).toBeTruthy();
-    const subject = screen.getByLabelText("主题") as HTMLInputElement;
-    expect(subject.value).toContain("[GMS送测]");
-    expect(screen.getByLabelText("正文").textContent).toContain("DEMO-R14-001");
-  });
-
   it("shows all check levels and saves the review without a reviewer name", async () => {
     selfTestReviewPlan.mockResolvedValue({
       ...reviewPlan,

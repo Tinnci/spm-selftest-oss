@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { setLanguage } from "../i18n";
-import type { SelfTestDiff, SelfTestRecord } from "../api/self_test";
-import { checkText, submissionEmail } from "./checks";
+import type { SelfTestRecord } from "../api/self_test";
+import { checkText } from "./checks";
 
 const record: SelfTestRecord = {
   id: "r1",
@@ -52,31 +52,6 @@ const record: SelfTestRecord = {
   features: [],
 };
 
-const baseline: SelfTestRecord = {
-  ...record,
-  id: "r0",
-  name: "Demo_IR_BUILD_20261001",
-  checks: [],
-  baseline_id: "",
-};
-
-const diff: SelfTestDiff = {
-  left_id: "r0",
-  right_id: "r1",
-  field_changes: [{ key: "gms", left: "15_r1", right: "16_r1" }],
-  key_fields: [],
-  drm_facts_added: [],
-  drm_facts_removed: [],
-  packages_added: ["com.c"],
-  packages_removed: ["com.a"],
-  packages_unchanged: 2,
-  packages_same: ["com.b", "com.d"],
-  features_added: [],
-  features_removed: [],
-  features_unchanged: 1,
-  features_same: ["android.hardware.drm"],
-};
-
 beforeEach(async () => {
   await setLanguage("zh-CN");
 });
@@ -90,24 +65,5 @@ describe("checkText", () => {
     expect(checkText(record.checks[1])).toContain("userdebug");
     await setLanguage("en");
     expect(checkText(record.checks[1])).toContain("3PL");
-  });
-});
-
-describe("submissionEmail", () => {
-  it("includes the key fields, checks and baseline diff", () => {
-    const email = submissionEmail(record, baseline, diff);
-    expect(email).toContain("[GMS送测] Demo B1");
-    expect(email).toContain("安全补丁: 2026-11-01");
-    expect(email).toContain("[ERROR]");
-    expect(email).toContain("对比基线：Demo_IR_BUILD_20261001");
-    expect(email).toContain("软件包：+1 / -1 / 未变化 2");
-    expect(email).toContain("GMS 版本: 15_r1 → 16_r1");
-  });
-
-  it("renders an English template after switching language", async () => {
-    await setLanguage("en");
-    const email = submissionEmail(record, null, null);
-    expect(email).toContain("[GMS submission] Demo B1");
-    expect(email).toContain("Check results:");
   });
 });

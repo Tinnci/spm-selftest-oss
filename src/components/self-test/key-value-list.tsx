@@ -1,0 +1,96 @@
+import type { Ref } from "react";
+import { Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ContextTarget } from "@/components/context-menu";
+import { useCopyWithToast } from "@/hooks/useCopyWithToast";
+
+export type KeyValueItem = {
+  key: string;
+  label: string;
+  value: string;
+  title?: string;
+  highlighted?: boolean;
+  rowRef?: Ref<HTMLDivElement>;
+};
+
+export function KeyValueList({
+  items,
+  copyable = true,
+  role,
+  id,
+  labelledBy,
+  tabIndex,
+}: {
+  items: KeyValueItem[];
+  copyable?: boolean;
+  role?: "tabpanel";
+  id?: string;
+  labelledBy?: string;
+  tabIndex?: number;
+}) {
+  const { t } = useTranslation();
+  const copyWithToast = useCopyWithToast();
+
+  return (
+    <dl
+      className="selftest-fields"
+      role={role}
+      id={id}
+      aria-labelledby={labelledBy}
+      tabIndex={tabIndex}
+    >
+      {items.map((item) => {
+        const row = (
+          <div
+            key={copyable ? undefined : item.key}
+            className={`selftest-field-row${item.highlighted ? " is-highlight" : ""}`}
+            ref={item.rowRef}
+            tabIndex={item.highlighted ? -1 : undefined}
+            data-field={item.key}
+          >
+            <dt>{item.label}</dt>
+            <dd>
+              <span title={item.title}>{item.value}</span>
+              {copyable ? (
+                <button
+                  type="button"
+                  className="selftest-copy-value"
+                  aria-label={`${t("selftest.ctxCopyValue")} ${item.label}`}
+                  title={t("selftest.ctxCopyValue")}
+                  onClick={() => void copyWithToast(item.value)}
+                >
+                  <Copy size={11} aria-hidden="true" />
+                </button>
+              ) : null}
+            </dd>
+          </div>
+        );
+
+        if (!copyable) return row;
+
+        return (
+          <ContextTarget
+            key={item.key}
+            title={item.label}
+            actions={[
+              {
+                id: "copy-val",
+                label: t("selftest.ctxCopyValue"),
+                icon: Copy,
+                run: () => copyWithToast(item.value),
+              },
+              {
+                id: "copy-pair",
+                label: t("selftest.ctxCopyPair"),
+                icon: Copy,
+                run: () => copyWithToast(`${item.label}: ${item.value}`),
+              },
+            ]}
+          >
+            {row}
+          </ContextTarget>
+        );
+      })}
+    </dl>
+  );
+}

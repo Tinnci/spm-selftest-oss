@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -12,7 +11,6 @@ import {
   GitCompare,
   Inbox,
   LayoutGrid,
-  Mail,
   MoreHorizontal,
   RefreshCw,
   SearchX,
@@ -38,25 +36,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EmailDialog, type EmailDraft } from "@/components/email-dialog";
 import { EmptyState } from "@/components/empty-state";
-import { ElevatedConfirm } from "@/components/elevated-confirm";
 import { ReviewDialog } from "@/components/review-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
-import { ContextTarget, type ContextAction } from "./components/context-menu";
+import { type ContextAction } from "./components/context-menu";
 import { SelfTestWorkspace } from "./components/self-test/workspace";
 import { CollectionDialog } from "./components/self-test/collection-dialog";
 import { Field } from "./components/self-test/field";
 import { ChecksPanel } from "./components/self-test/checks-panel";
 import { DiffPanel } from "./components/self-test/diff-panel";
 import { LauncherLayoutPanel } from "./components/self-test/launcher-panel";
+import {
+  ScrollableTabs,
+  type ScrollableTabItem,
+} from "@/components/ui/scrollable-tabs";
+import { DrmPanel } from "./components/self-test/drm-panel";
+import { FilterableMonoList } from "./components/self-test/filterable-mono-list";
+import { HardwarePanel } from "./components/self-test/hardware-panel";
+import { KeyValueList } from "./components/self-test/key-value-list";
 import { RecordSidebar } from "./components/self-test/record-sidebar";
-import { useHorizontalScroll } from "./hooks/useHorizontalScroll";
+import { useCopyWithToast } from "./hooks/useCopyWithToast";
 import { useSelfTestCollection } from "./hooks/useSelfTestCollection";
-import { copyText } from "./clipboard";
 import { revealPath } from "./api/shell";
 import {
   selfTestDelete,
@@ -94,12 +97,7 @@ import {
   recordMarkdown,
 } from "./selftest/report";
 import { errorText } from "./selftest/errors";
-import {
-  groupedChecks,
-  submissionEmail,
-  submissionEmailBlock,
-  vendorBootBackupCheck,
-} from "./selftest/checks";
+import { groupedChecks, vendorBootBackupCheck } from "./selftest/checks";
 import { TEST_TYPES } from "./selftest/constants";
 import { localDate } from "./selftest/date";
 import { useRecordBrowser } from "./hooks/useRecordBrowser";
@@ -128,27 +126,6 @@ function splitTags(value: string): string[] {
     .filter(Boolean);
 }
 
-function moveTabFocus(event: KeyboardEvent<HTMLDivElement>) {
-  const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
-  if (!keys.includes(event.key)) return;
-  const tabs = Array.from(
-    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
-  );
-  const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
-  if (current < 0) return;
-  const next =
-    event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? tabs.length - 1
-        : event.key === "ArrowLeft"
-          ? (current - 1 + tabs.length) % tabs.length
-          : (current + 1) % tabs.length;
-  event.preventDefault();
-  tabs[next]?.focus();
-  tabs[next]?.click();
-}
-
 export function SelfTestPage({
   onActivity,
   recordTags = DEFAULT_RECORD_TAGS,
@@ -162,6 +139,7 @@ export function SelfTestPage({
 }) {
   useTranslation();
   const toast = useToast();
+  const copyWithToast = useCopyWithToast();
   const [error, setError] = useState("");
 
   const [records, setRecords] = useState<SelfTestSummary[]>([]);
@@ -230,13 +208,6 @@ export function SelfTestPage({
     "all" | "fields" | "packages" | "features" | "drm"
   >("all");
   const [metaOpen, setMetaOpen] = useState(false);
-  const [emailOpen, setEmailOpen] = useState(false);
-  const [emailMergeId, setEmailMergeId] = useState("");
-  const [emailDraft, setEmailDraft] = useState<EmailDraft>({
-    subject: "",
-    body: "",
-  });
-  const [emailBusy, setEmailBusy] = useState(false);
   const [exportedPath, setExportedPath] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [loadedPlan, setLoadedPlan] = useState<{
@@ -249,12 +220,6 @@ export function SelfTestPage({
     loadedPlan?.record === detail && loadedPlan.baselineId === reviewBaselineId
       ? loadedPlan.plan
       : null;
-  const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [emailGateTarget, setEmailGateTarget] = useState<SelfTestRecord | null>(
-    null,
-  );
-  const [emailGateMergeId, setEmailGateMergeId] = useState("");
-  const [emailGatePlan, setEmailGatePlan] = useState<ReviewPlan | null>(null);
 
   const applyDetail = (rec: SelfTestRecord | null) => {
     setDetail(
@@ -329,9 +294,9 @@ export function SelfTestPage({
         collection.adb.adbPath,
       );
       setLiveLauncher(next);
-      toast.show(t("selftest.tab.launcher", { count: next.items.length }));
+      toast.success(t("selftest.tab.launcher", { count: next.items.length }));
     } catch (err) {
-      toast.show(errorText(err));
+      toast.error(errorText(err));
     } finally {
       setInspectingLauncher(false);
     }
@@ -598,12 +563,7 @@ export function SelfTestPage({
   const handleCopyMarkdown = async (targetRec?: SelfTestRecord) => {
     const rec = targetRec ?? detail;
     if (!rec) return;
-    try {
-      await copyText(recordMarkdown(rec));
-      toast.success(t("selftest.copied"));
-    } catch (e) {
-      setError(errorText(e));
-    }
+    await copyWithToast(recordMarkdown(rec));
   };
 
   const handleRecheck = async () => {
@@ -633,125 +593,9 @@ export function SelfTestPage({
     }
   };
 
-  const buildEmailDraft = async (record: SelfTestRecord, mergeId?: string) => {
-    setEmailBusy(true);
-    setError("");
-    try {
-      const baselineId =
-        record.id === detail?.id && compareId && compareId !== record.id
-          ? compareId
-          : record.baseline_id;
-      const baseline = baselineId
-        ? await selfTestGet(baselineId).catch(() => null)
-        : null;
-      const comparison =
-        baseline && baseline.id !== record.id
-          ? await selfTestDiff(baseline.id, record.id).catch(() => null)
-          : null;
-      const text = submissionEmail(record, baseline, comparison);
-      const [subject, ...rest] = text.split("\n");
-      setEmailDraft({
-        subject: subject.trim(),
-        body: rest.join("\n").replace(/^\n+/, ""),
-      });
-      setEmailMergeId(mergeId ?? "");
-      setEmailOpen(true);
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setEmailBusy(false);
-    }
-  };
-
-  const openEmailDialog = async (target?: SelfTestRecord, mergeId?: string) => {
-    const record = target ?? detail;
-    if (!record || emailBusy) return;
-    setError("");
-    try {
-      const baselineId =
-        record.id === detail?.id && compareId && compareId !== record.id
-          ? compareId
-          : record.baseline_id;
-      const plan = await selfTestReviewPlan(record.id, baselineId || null);
-      const merge = mergeId
-        ? await selfTestGet(mergeId).catch(() => null)
-        : null;
-      const mergePlan = merge
-        ? await selfTestReviewPlan(merge.id, merge.baseline_id || null)
-        : null;
-      const blockedPlan = !plan.ready
-        ? plan
-        : mergePlan && !mergePlan.ready
-          ? mergePlan
-          : null;
-      if (blockedPlan) {
-        const blockedRecord = blockedPlan === plan ? record : merge;
-        if (!blockedRecord) return;
-        if (blockedRecord.checks.some((check) => check.level === "error")) {
-          if (blockedRecord.id !== detail?.id) {
-            await openRecord(blockedRecord.id);
-          }
-          checksRef.current?.focus();
-          toast.error(t("selftest.review.errorsBlock"), {
-            description: t("selftest.review.errorsBlockHint"),
-            timeout: 7000,
-          });
-          return;
-        }
-        if (blockedRecord.id !== detail?.id) {
-          await openRecord(blockedRecord.id);
-        }
-        setReviewOpen(true);
-        toast.warning(
-          t("selftest.review.emailBlocked", {
-            count: blockedPlan.counts.pending,
-          }),
-          {
-            description: blockedRecord.name || blockedRecord.id,
-            action: {
-              label: t("selftest.review.open"),
-              onClick: () => setReviewOpen(true),
-            },
-            timeout: 8000,
-            priority: "high",
-          },
-        );
-        return;
-      }
-      setEmailGateTarget(record);
-      setEmailGateMergeId(mergeId ?? "");
-      setEmailGatePlan(plan);
-      setEmailGateOpen(true);
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
-
-  const confirmEmail = async () => {
-    const record = emailGateTarget;
-    if (!record) return;
-    setEmailGateOpen(false);
-    await buildEmailDraft(record, emailGateMergeId || undefined);
-    setEmailGateTarget(null);
-    setEmailGateMergeId("");
-    setEmailGatePlan(null);
-  };
-
   const handleCopyDiffMarkdown = async () => {
     if (!detail || !diff) return;
-    try {
-      await copyText(diffMarkdown(detail, diff, records));
-      toast.success(t("selftest.copied"));
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
-
-  const openBatchEmail = async () => {
-    if (emailBusy || !selectedIds.length) return;
-    const primary = await selfTestGet(selectedIds[0]).catch(() => null);
-    if (!primary) return;
-    await openEmailDialog(primary, selectedIds[1]);
+    await copyWithToast(diffMarkdown(detail, diff, records));
   };
 
   const compareSelected = async () => {
@@ -812,7 +656,7 @@ export function SelfTestPage({
         label: t("selftest.ctxCopyBuild", { build: rec.build }),
         icon: Copy,
         separator: true,
-        run: () => copyText(rec.build),
+        run: () => copyWithToast(rec.build),
       },
       {
         id: "copy-md",
@@ -1016,23 +860,6 @@ export function SelfTestPage({
     return () => window.clearTimeout(timeout);
   }, [fieldTarget]);
 
-  const tabsRef = useHorizontalScroll<HTMLDivElement>();
-
-  useEffect(() => {
-    const activeTab = tabsRef.current?.querySelector<HTMLButtonElement>(
-      '[role="tab"][aria-selected="true"]',
-    );
-    if (!activeTab) return;
-    const reduceMotion = window.matchMedia?.(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    activeTab.scrollIntoView?.({
-      inline: "nearest",
-      block: "nearest",
-      behavior: reduceMotion ? "auto" : "smooth",
-    });
-  }, [detailTab, detail?.id, tabsRef]);
-
   const actionRef = useRef({
     run: collection.run,
     select: handleSelectRecord,
@@ -1117,7 +944,6 @@ export function SelfTestPage({
       handleSelectRecord={(id) => void handleSelectRecord(id)}
       refreshList={(id) => void refreshList(id)}
       clearFilters={clearFilters}
-      openBatchEmail={() => void openBatchEmail()}
       compareSelected={() => void compareSelected()}
       recordContextActions={recordContextActions}
       handleExport={(id, format) => void handleExport(id, format)}
@@ -1205,20 +1031,15 @@ export function SelfTestPage({
                   <AlertTriangle aria-hidden="true" />
                   {t("selftest.reviewIssues")}
                 </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  disabled={emailBusy}
-                  onClick={() => void openEmailDialog()}
-                >
-                  {emailBusy ? (
-                    <Spinner aria-hidden="true" />
-                  ) : (
-                    <Mail aria-hidden="true" />
-                  )}
-                  {t("selftest.prepareEmail")}
-                </Button>
-              )}
+              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleCopyMarkdown()}
+              >
+                <Copy aria-hidden="true" />
+                {t("selftest.copyMarkdown")}
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -1285,10 +1106,6 @@ export function SelfTestPage({
                   <DropdownMenuItem onClick={() => void handleCopyMarkdown()}>
                     <Copy aria-hidden="true" />
                     {t("selftest.copyMarkdown")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void openEmailDialog()}>
-                    <Mail aria-hidden="true" />
-                    {t("selftest.copyEmail")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -1483,310 +1300,114 @@ export function SelfTestPage({
             </div>
           ) : null}
 
-          <div
-            ref={tabsRef}
-            className="selftest-tabs"
-            role="tablist"
-            aria-label={t("selftest.detailTabs")}
-            tabIndex={-1}
-            onKeyDown={moveTabFocus}
-          >
-            <button
-              type="button"
-              role="tab"
-              id="selftest-tab-gms"
-              aria-controls="selftest-panel-gms"
-              aria-selected={detailTab === "gms"}
-              tabIndex={detailTab === "gms" ? 0 : -1}
-              className={detailTab === "gms" ? "is-active" : ""}
-              onClick={() => setDetailTab("gms")}
-            >
-              {t("selftest.tab.gms")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="selftest-tab-drm"
-              aria-controls="selftest-panel-drm"
-              aria-selected={detailTab === "drm"}
-              tabIndex={detailTab === "drm" ? 0 : -1}
-              className={detailTab === "drm" ? "is-active" : ""}
-              onClick={() => setDetailTab("drm")}
-            >
-              {t("selftest.tab.drm")}
-            </button>
-            {detail.hardware ? (
-              <button
-                type="button"
-                role="tab"
-                id="selftest-tab-hardware"
-                aria-controls="selftest-panel-hardware"
-                aria-selected={detailTab === "hardware"}
-                tabIndex={detailTab === "hardware" ? 0 : -1}
-                className={detailTab === "hardware" ? "is-active" : ""}
-                onClick={() => setDetailTab("hardware")}
-              >
-                {t("selftest.hardware.tab")}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              role="tab"
-              id="selftest-tab-packages"
-              aria-controls="selftest-panel-packages"
-              aria-selected={detailTab === "packages"}
-              tabIndex={detailTab === "packages" ? 0 : -1}
-              className={detailTab === "packages" ? "is-active" : ""}
-              onClick={() => setDetailTab("packages")}
-            >
-              {t("selftest.tab.packages", {
-                count: detail.packages.length,
-              })}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="selftest-tab-features"
-              aria-controls="selftest-panel-features"
-              aria-selected={detailTab === "features"}
-              tabIndex={detailTab === "features" ? 0 : -1}
-              className={detailTab === "features" ? "is-active" : ""}
-              onClick={() => setDetailTab("features")}
-            >
-              {t("selftest.tab.features", {
-                count: detail.features.length,
-              })}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="selftest-tab-launcher"
-              aria-controls="selftest-panel-launcher"
-              aria-selected={detailTab === "launcher"}
-              tabIndex={detailTab === "launcher" ? 0 : -1}
-              className={detailTab === "launcher" ? "is-active" : ""}
-              onClick={() => setDetailTab("launcher")}
-            >
-              <LayoutGrid size={13} aria-hidden="true" />
-              {t("selftest.tab.launcher", {
-                count: activeLauncherLayout?.items.length ?? 0,
-              })}
-            </button>
-            {records.length > 1 ? (
-              <button
-                type="button"
-                role="tab"
-                id="selftest-tab-diff"
-                aria-controls="selftest-panel-diff"
-                aria-selected={detailTab === "diff"}
-                tabIndex={detailTab === "diff" ? 0 : -1}
-                className={detailTab === "diff" ? "is-active" : ""}
-                onClick={() => setDetailTab("diff")}
-              >
-                <GitCompare size={13} aria-hidden="true" />
-                {t("selftest.tab.diff")}
-              </button>
-            ) : null}
-          </div>
+          <ScrollableTabs
+            tabs={[
+              {
+                id: "gms",
+                label: t("selftest.tab.gms"),
+                tabId: "selftest-tab-gms",
+                panelId: "selftest-panel-gms",
+              },
+              {
+                id: "drm",
+                label: t("selftest.tab.drm"),
+                tabId: "selftest-tab-drm",
+                panelId: "selftest-panel-drm",
+              },
+              ...(detail.hardware
+                ? [
+                    {
+                      id: "hardware",
+                      label: t("selftest.hardware.tab"),
+                      tabId: "selftest-tab-hardware",
+                      panelId: "selftest-panel-hardware",
+                    } satisfies ScrollableTabItem<DetailTab>,
+                  ]
+                : []),
+              {
+                id: "packages",
+                label: t("selftest.tab.packages", {
+                  count: detail.packages.length,
+                }),
+                tabId: "selftest-tab-packages",
+                panelId: "selftest-panel-packages",
+              },
+              {
+                id: "features",
+                label: t("selftest.tab.features", {
+                  count: detail.features.length,
+                }),
+                tabId: "selftest-tab-features",
+                panelId: "selftest-panel-features",
+              },
+              {
+                id: "launcher",
+                icon: <LayoutGrid size={13} aria-hidden="true" />,
+                label: t("selftest.tab.launcher", {
+                  count: activeLauncherLayout?.items.length ?? 0,
+                }),
+                tabId: "selftest-tab-launcher",
+                panelId: "selftest-panel-launcher",
+              },
+              ...(records.length > 1
+                ? [
+                    {
+                      id: "diff",
+                      icon: <GitCompare size={13} aria-hidden="true" />,
+                      label: t("selftest.tab.diff"),
+                      tabId: "selftest-tab-diff",
+                      panelId: "selftest-panel-diff",
+                    } satisfies ScrollableTabItem<DetailTab>,
+                  ]
+                : []),
+            ]}
+            value={detailTab}
+            onChange={setDetailTab}
+            ariaLabel={t("selftest.detailTabs")}
+            scrollKey={detail.id}
+          />
 
           {detailTab === "gms" ? (
-            <dl
-              className="selftest-fields"
+            <KeyValueList
               role="tabpanel"
               id="selftest-panel-gms"
-              aria-labelledby="selftest-tab-gms"
+              labelledBy="selftest-tab-gms"
               tabIndex={0}
-            >
-              {FIELD_ORDER.map((key) => {
-                const label = t(`selftest.field.${key}`);
-                const value = detail.fields[key] ?? "(not set)";
+              items={FIELD_ORDER.map((key) => {
                 const highlighted =
                   fieldTarget?.key === key &&
                   fieldTarget.recordId === detail.id;
-                return (
-                  <ContextTarget
-                    key={key}
-                    title={label}
-                    actions={[
-                      {
-                        id: "copy-val",
-                        label: t("selftest.ctxCopyValue"),
-                        icon: Copy,
-                        run: () => copyText(value),
-                      },
-                      {
-                        id: "copy-pair",
-                        label: t("selftest.ctxCopyPair"),
-                        icon: Copy,
-                        run: () => copyText(`${label}: ${value}`),
-                      },
-                    ]}
-                  >
-                    <div
-                      className={`selftest-field-row${highlighted ? " is-highlight" : ""}`}
-                      ref={highlighted ? checkFieldRef : undefined}
-                      tabIndex={highlighted ? -1 : undefined}
-                      data-field={key}
-                    >
-                      <dt>{label}</dt>
-                      <dd>
-                        <span>{value}</span>
-                        <button
-                          type="button"
-                          className="selftest-copy-value"
-                          aria-label={`${t("selftest.ctxCopyValue")} ${label}`}
-                          title={t("selftest.ctxCopyValue")}
-                          onClick={() => void copyText(value)}
-                        >
-                          <Copy size={11} aria-hidden="true" />
-                        </button>
-                      </dd>
-                    </div>
-                  </ContextTarget>
-                );
+                return {
+                  key,
+                  label: t(`selftest.field.${key}`),
+                  value: detail.fields[key] ?? "(not set)",
+                  highlighted,
+                  rowRef: highlighted ? checkFieldRef : undefined,
+                };
               })}
-            </dl>
+            />
           ) : null}
 
           {detailTab === "drm" ? (
-            <div
-              className="selftest-drm"
-              role="tabpanel"
-              id="selftest-panel-drm"
-              aria-labelledby="selftest-tab-drm"
-              tabIndex={0}
-            >
-              {!detail.drm_facts.length && !detail.drm_sections.length ? (
-                <p className="quiet">{t("selftest.noDrm")}</p>
-              ) : null}
-              {detail.drm_facts.length ? (
-                <div className="selftest-drm-facts">
-                  {detail.drm_facts.map((fact, idx) => (
-                    <Badge key={idx} variant="secondary">
-                      {fact}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
-              {detail.drm_sections.map((sec) => (
-                <section key={sec.name} className="selftest-drm-section">
-                  <h4>[{sec.name}]</h4>
-                  <pre>{sec.lines.join("\n")}</pre>
-                </section>
-              ))}
-            </div>
+            <DrmPanel facts={detail.drm_facts} sections={detail.drm_sections} />
           ) : null}
 
           {detailTab === "hardware" && detail.hardware ? (
-            <div
-              className="selftest-drm"
-              role="tabpanel"
-              id="selftest-panel-hardware"
-              aria-labelledby="selftest-tab-hardware"
-              tabIndex={0}
-            >
-              {detail.hardware.issues.map((issue) => (
-                <p className="quiet" key={issue}>
-                  {t("selftest.hardware.issue", {
-                    section: t(`selftest.hardware.${issue}`),
-                  })}
-                </p>
-              ))}
-              <section className="selftest-drm-section">
-                <h4>{t("selftest.hardware.active")}</h4>
-                <dl className="selftest-fields">
-                  {Object.entries(detail.hardware.active).map(([key, read]) => (
-                    <div className="selftest-field-row" key={key}>
-                      <dt>
-                        {t(`selftest.hardware.field.${key}`, {
-                          defaultValue: key,
-                        })}
-                      </dt>
-                      <dd>
-                        <span title={read.source}>
-                          {read.values.length
-                            ? read.values.join(" · ")
-                            : t(`selftest.hardware.status.${read.status}`)}
-                        </span>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-              <section className="selftest-drm-section">
-                <h4>
-                  {t("selftest.hardware.mmi")} ·{" "}
-                  {t(`selftest.hardware.status.${detail.hardware.mmi_status}`)}
-                </h4>
-                <dl className="selftest-fields">
-                  {Object.entries(detail.hardware.mmi).map(([key, value]) => (
-                    <div className="selftest-field-row" key={key}>
-                      <dt>
-                        {t(`selftest.hardware.field.${key}`, {
-                          defaultValue: key,
-                        })}
-                      </dt>
-                      <dd>
-                        <span>{value.replaceAll("\n", " · ")}</span>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-              <section className="selftest-drm-section">
-                <h4>{t("selftest.hardware.inventory")}</h4>
-                {Object.entries(detail.hardware.inventory_sources).map(
-                  ([group, sources]) => {
-                    const paths = detail.hardware?.inventory[group] ?? [];
-                    return (
-                      <details key={group}>
-                        <summary>
-                          {t(`selftest.hardware.group.${group}`)} (
-                          {paths.length})
-                        </summary>
-                        <pre>
-                          {Object.entries(sources)
-                            .map(
-                              ([path, status]) =>
-                                `${path} · ${t(`selftest.hardware.status.${status}`)}`,
-                            )
-                            .join("\n")}
-                        </pre>
-                        {paths.length ? <pre>{paths.join("\n")}</pre> : null}
-                      </details>
-                    );
-                  },
-                )}
-              </section>
-            </div>
+            <HardwarePanel hardware={detail.hardware} />
           ) : null}
 
           {detailTab === "packages" || detailTab === "features" ? (
-            <div
-              className="selftest-list-pane"
-              role="tabpanel"
-              id={`selftest-panel-${detailTab}`}
-              aria-labelledby={`selftest-tab-${detailTab}`}
-              tabIndex={0}
-            >
-              <Input
-                value={listFilter}
-                placeholder={t("selftest.filterList")}
-                onChange={(e) => setListFilter(e.target.value)}
-              />
-              <ul className="selftest-mono-list">
-                {(detailTab === "packages"
-                  ? filteredPackages
-                  : filteredFeatures
-                ).map((entry) => (
-                  <li key={entry}>{entry}</li>
-                ))}
-              </ul>
-              {(detailTab === "packages" ? filteredPackages : filteredFeatures)
-                .length === 0 ? (
-                <p className="quiet">{t("selftest.emptyList")}</p>
-              ) : null}
-            </div>
+            <FilterableMonoList
+              items={
+                detailTab === "packages" ? filteredPackages : filteredFeatures
+              }
+              filter={listFilter}
+              onFilterChange={setListFilter}
+              placeholder={t("selftest.filterList")}
+              emptyText={t("selftest.emptyList")}
+              panelId={`selftest-panel-${detailTab}`}
+              tabId={`selftest-tab-${detailTab}`}
+            />
           ) : null}
 
           {detailTab === "diff" ? (
@@ -1824,7 +1445,6 @@ export function SelfTestPage({
               serial={collection.adb.serial}
               inspecting={inspectingLauncher}
               onInspectLive={handleInspectLauncher}
-              onCopied={() => toast.show(t("common.copied"))}
             />
           ) : null}
         </>
@@ -1935,23 +1555,6 @@ export function SelfTestPage({
         </DialogContent>
       </Dialog>
 
-      <EmailDialog
-        open={emailOpen}
-        onOpenChange={setEmailOpen}
-        draft={emailDraft}
-        others={records
-          .filter(
-            (record) =>
-              record.id !== detail?.id && record.review_status === "ready",
-          )
-          .map((record) => ({
-            id: record.id,
-            label: `${record.model_code || record.model} · ${record.build}`,
-          }))}
-        buildBlock={async (id) => submissionEmailBlock(await selfTestGet(id))}
-        initialMergeId={emailMergeId}
-      />
-
       {detail ? (
         <ReviewDialog
           open={reviewOpen}
@@ -1964,53 +1567,6 @@ export function SelfTestPage({
           }}
         />
       ) : null}
-
-      <ElevatedConfirm
-        open={emailGateOpen}
-        tone="warning"
-        title={t("selftest.review.emailElevatedTitle")}
-        description={t("selftest.review.emailElevatedBody")}
-        ack={t("selftest.review.emailElevatedAck")}
-        confirmLabel={t("selftest.review.emailElevatedConfirm")}
-        cancelLabel={t("selftest.review.cancel")}
-        onCancel={() => {
-          setEmailGateOpen(false);
-          setEmailGateTarget(null);
-        }}
-        onConfirm={() => void confirmEmail()}
-        details={
-          <div className="elevated-summary">
-            <div className="elevated-summary-wide">
-              <span>{t("selftest.review.summaryRecord")}</span>
-              <strong>{emailGateTarget?.name || "-"}</strong>
-            </div>
-            <div>
-              <span>{t("selftest.review.summaryReview")}</span>
-              <strong>
-                {emailGatePlan
-                  ? `${emailGatePlan.counts.confirmed + emailGatePlan.counts.waived}/${emailGatePlan.counts.required}`
-                  : "-"}
-              </strong>
-            </div>
-            <div>
-              <span>{t("selftest.review.summaryWarnings")}</span>
-              <strong>
-                {emailGatePlan
-                  ? emailGatePlan.items.filter(
-                      (item) => item.group === "warning",
-                    ).length
-                  : 0}
-              </strong>
-            </div>
-            <div className="elevated-summary-wide">
-              <span>Vendor boot debug</span>
-              <strong>
-                {emailGateTarget?.artifacts?.vendor_boot_debug?.path || "-"}
-              </strong>
-            </div>
-          </div>
-        }
-      />
 
       <Dialog
         open={!!pendingDelete}

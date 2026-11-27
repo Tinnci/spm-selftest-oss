@@ -4,7 +4,6 @@ import {
   Download,
   GitCompare,
   Inbox,
-  Mail,
   RefreshCw,
   SearchX,
   Smartphone,
@@ -71,7 +70,6 @@ export function RecordSidebar({
   handleSelectRecord,
   refreshList,
   clearFilters,
-  openBatchEmail,
   compareSelected,
   recordContextActions,
   handleExport,
@@ -104,7 +102,6 @@ export function RecordSidebar({
   handleSelectRecord: (id: string) => void;
   refreshList: (id?: string) => void;
   clearFilters: () => void;
-  openBatchEmail: () => void;
   compareSelected: () => void;
   recordContextActions: (record: SelfTestSummary) => ContextAction[];
   handleExport: (id: string, format: SelfTestExportFormat) => void;
@@ -270,14 +267,6 @@ export function RecordSidebar({
               </Button>
             </div>
             <div className="selftest-bulk-actions">
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => void openBatchEmail()}
-              >
-                <Mail aria-hidden="true" />
-                {t("selftest.bulkEmail")}
-              </Button>
               <Button
                 size="xs"
                 variant="outline"

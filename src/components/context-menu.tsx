@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, type LucideIcon } from "lucide-react";
-import { copyText } from "../clipboard";
+import { useCopyWithToast } from "../hooks/useCopyWithToast";
 import { t } from "../i18n";
 
 export type ContextAction = {
@@ -52,6 +52,7 @@ export function ContextTarget({
 
 export function ContextMenuProvider({ children }: { children: ReactNode }) {
   useTranslation();
+  const copyWithToast = useCopyWithToast();
   const entries = useRef(new Map<string, Entry>());
   const returnFocus = useRef<HTMLElement | null>(null);
   const generation = useRef(0);
@@ -85,7 +86,7 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
               id: "copy-selection",
               label: t("context.copySelection"),
               icon: Copy,
-              run: () => copyText(text),
+              run: () => copyWithToast(text),
             },
             ...target.entry.actions.map((action, index) =>
               index === 0 ? { ...action, separator: true } : action,

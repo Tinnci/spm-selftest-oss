@@ -2,12 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen,
-  ClipboardCheck,
   ArrowDownToLine,
   Languages,
   Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
   Settings,
   Sun,
   X,
@@ -34,50 +31,6 @@ import {
 import { readPreferences, savePreferences } from "./preferences";
 import { setTheme, themePreference, type Theme } from "./theme";
 
-const NARROW = "(max-width: 960px)";
-
-function useNarrow() {
-  const [narrow, setNarrow] = useState(
-    () => window.matchMedia?.(NARROW).matches ?? false,
-  );
-  useEffect(() => {
-    const media = window.matchMedia?.(NARROW);
-    if (!media) return;
-    const change = () => setNarrow(media.matches);
-    media.addEventListener("change", change);
-    return () => media.removeEventListener("change", change);
-  }, []);
-  return narrow;
-}
-
-function RailLink({
-  icon: Icon,
-  label,
-  current,
-  collapsed,
-  onClick,
-}: {
-  icon: typeof ClipboardCheck;
-  label: string;
-  current?: boolean;
-  collapsed: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="rail-link"
-      aria-current={current ? "page" : undefined}
-      aria-label={label}
-      title={collapsed ? label : undefined}
-      onClick={onClick}
-    >
-      <Icon aria-hidden="true" />
-      {collapsed ? null : <span>{label}</span>}
-    </button>
-  );
-}
-
 export default function App() {
   useTranslation();
   const [settings, setSettings] = useState(false);
@@ -87,9 +40,7 @@ export default function App() {
   const [version, setVersion] = useState("");
   const [busy, setBusy] = useState(false);
   const [recordsRevision, setRecordsRevision] = useState(0);
-  const narrow = useNarrow();
   const update = useDesktopUpdate();
-  const collapsed = preferences.railCollapsed || narrow;
 
   const updatePreferences = useCallback(
     (changes: Parameters<typeof savePreferences>[0]) => {
@@ -118,9 +69,9 @@ export default function App() {
   const otherLanguage = language === "zh-CN" ? "en" : "zh-CN";
 
   return (
-    <ContextMenuProvider>
-      <TooltipProvider>
-        <ToastProvider>
+    <ToastProvider>
+      <ContextMenuProvider>
+        <TooltipProvider>
           <div className="app-shell">
             <SettingsDialog
               open={settings}
@@ -143,7 +94,10 @@ export default function App() {
                 type="button"
                 className="wordmark"
                 aria-label={t("app.name")}
-                onClick={() => setSettings(false)}
+                onClick={() => {
+                  setSettings(false);
+                  setView("selftest");
+                }}
               >
                 <BrandMark busy={busy} />
                 <span className="wordmark-label">{t("app.name")}</span>
@@ -164,6 +118,20 @@ export default function App() {
                     })}
                   </Button>
                 ) : null}
+                <Button
+                  variant={view === "guide" ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  aria-label={t("nav.guide")}
+                  aria-pressed={view === "guide"}
+                  title={t("nav.guide")}
+                  onClick={() =>
+                    setView((current) =>
+                      current === "guide" ? "selftest" : "guide",
+                    )
+                  }
+                >
+                  <BookOpen aria-hidden="true" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon-sm"
@@ -236,55 +204,6 @@ export default function App() {
             ) : null}
 
             <div className="app-body">
-              <nav
-                className="rail"
-                data-collapsed={collapsed}
-                aria-label={t("nav.label")}
-              >
-                <RailLink
-                  icon={ClipboardCheck}
-                  label={t("nav.selftest")}
-                  current={view === "selftest"}
-                  collapsed={collapsed}
-                  onClick={() => setView("selftest")}
-                />
-                <RailLink
-                  icon={BookOpen}
-                  label={t("nav.guide")}
-                  current={view === "guide"}
-                  collapsed={collapsed}
-                  onClick={() => setView("guide")}
-                />
-                <div className="rail-models" aria-hidden="true" />
-                <div className="rail-foot">
-                  <RailLink
-                    icon={Settings}
-                    label={t("nav.settings")}
-                    collapsed={collapsed}
-                    onClick={() => setSettings(true)}
-                  />
-                  {narrow ? null : (
-                    <RailLink
-                      icon={
-                        preferences.railCollapsed
-                          ? PanelLeftOpen
-                          : PanelLeftClose
-                      }
-                      label={t(
-                        preferences.railCollapsed
-                          ? "nav.expand"
-                          : "nav.collapse",
-                      )}
-                      collapsed={collapsed}
-                      onClick={() =>
-                        updatePreferences({
-                          railCollapsed: !preferences.railCollapsed,
-                        })
-                      }
-                    />
-                  )}
-                </div>
-              </nav>
               {view === "guide" ? (
                 <div className="window-scroll">
                   <main className="page-content">
@@ -307,8 +226,8 @@ export default function App() {
               )}
             </div>
           </div>
-        </ToastProvider>
-      </TooltipProvider>
-    </ContextMenuProvider>
+        </TooltipProvider>
+      </ContextMenuProvider>
+    </ToastProvider>
   );
 }

@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Play, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TestType } from "@/api/self_test";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -68,23 +69,52 @@ export function CollectionDialog({
     return t(`selftest.deviceState.${known}`, { state: selected.state });
   })();
 
+  const readyDevices = env?.devices.filter((d) => d.state === "device") ?? [];
+  const selectedDevice = env?.devices.find((d) => d.serial === serial);
+  const headerBadge = (() => {
+    if (!env) return null;
+    if (!env.adb_found) {
+      return {
+        tone: "outline" as const,
+        label: t("selftest.adbMissing"),
+      };
+    }
+    if (!readyDevices.length) {
+      return {
+        tone: "outline" as const,
+        label: t("selftest.noDevices"),
+      };
+    }
+    const label =
+      selectedDevice && selectedDevice.state === "device"
+        ? selectedDevice.model || selectedDevice.serial
+        : `${readyDevices.length} ${t("selftest.adbReady")}`;
+    return { tone: "secondary" as const, label };
+  })();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger
-        render={
-          <Button
-            className="selftest-collect-fab"
-            disabled={collecting || blocked}
-          />
-        }
-      >
-        {collecting ? (
-          <Spinner />
-        ) : (
-          <Plus className="size-6" aria-hidden="true" />
-        )}
-        {t(collecting ? "selftest.running" : "selftest.newCollect")}
-      </DialogTrigger>
+      <div className="selftest-header-collect">
+        {headerBadge ? (
+          <Badge variant={headerBadge.tone}>{headerBadge.label}</Badge>
+        ) : null}
+        <DialogTrigger
+          render={
+            <Button
+              size="sm"
+              className="selftest-collect-trigger"
+              disabled={collecting || blocked}
+            />
+          }
+        >
+          {collecting ? (
+            <Spinner />
+          ) : (
+            <Plus className="size-4" aria-hidden="true" />
+          )}
+          {t(collecting ? "selftest.running" : "selftest.newCollect")}
+        </DialogTrigger>
+      </div>
       <DialogContent
         className="selftest-collect-dialog"
         showCloseButton={false}
@@ -111,7 +141,7 @@ export function CollectionDialog({
               onScan={() => void scanEnv()}
               onRestart={() => void restartAdb()}
             />
-            <div className="selftest-collector">
+            <div className="selftest-collector selftest-collector-primary">
               <Field
                 className="selftest-field-device"
                 label={t("selftest.deviceLabel")}
@@ -140,16 +170,6 @@ export function CollectionDialog({
                 </select>
               </Field>
               <Field
-                className="selftest-field-adb"
-                label={t("selftest.adbPathLabel")}
-              >
-                <Input
-                  value={adbPath}
-                  placeholder={t("selftest.adbPath")}
-                  onChange={(e) => setAdbPath(e.target.value)}
-                />
-              </Field>
-              <Field
                 className="selftest-field-type"
                 label={t("selftest.testType")}
               >
@@ -168,6 +188,8 @@ export function CollectionDialog({
                   ))}
                 </select>
               </Field>
+            </div>
+            <div className="selftest-collector selftest-collector-secondary">
               <Field className="selftest-field-name" label={t("selftest.name")}>
                 <Input
                   value={draft.name}
@@ -200,6 +222,16 @@ export function CollectionDialog({
                   onChange={(e) =>
                     setDraft({ ...draft, otaVersion: e.target.value })
                   }
+                />
+              </Field>
+              <Field
+                className="selftest-field-adb"
+                label={t("selftest.adbPathLabel")}
+              >
+                <Input
+                  value={adbPath}
+                  placeholder={t("selftest.adbPath")}
+                  onChange={(e) => setAdbPath(e.target.value)}
                 />
               </Field>
               <Field className="selftest-field-note" label={t("selftest.note")}>

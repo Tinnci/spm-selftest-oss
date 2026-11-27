@@ -23,6 +23,7 @@ import { SettingsGroup } from "@/components/settings-group";
 import { UpdateSettings } from "@/components/update-settings";
 import type { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/components/ui/toast";
 import {
   exportSelfTestBackup,
   importSelfTestBackup,
@@ -68,6 +69,7 @@ export function SettingsDialog({
   onPreferencesChange: typeof savePreferences;
   onBackupImported?: () => void;
 }) {
+  const toast = useToast();
   const [storage, setStorage] = useState("");
   const [loadingStorage, setLoadingStorage] = useState(false);
   const [backupAction, setBackupAction] = useState<"export" | "import" | null>(
@@ -82,20 +84,20 @@ export function SettingsDialog({
     try {
       const res = await exportSelfTestBackup(language);
       if (res) {
-        setBackupStatus(
-          t("settings.backupExported", {
-            records: res.records,
-            reviews: res.reviews,
-            path: res.path,
-          }),
-        );
+        const message = t("settings.backupExported", {
+          records: res.records,
+          reviews: res.reviews,
+          path: res.path,
+        });
+        setBackupStatus(message);
+        toast.success(message);
       }
     } catch (error) {
-      setBackupStatus(
-        t("settings.backupFailed", {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      const message = t("settings.backupFailed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      setBackupStatus(message);
+      toast.error(message);
     } finally {
       setBackupAction(null);
     }
@@ -107,7 +109,7 @@ export function SettingsDialog({
     try {
       const res = await importSelfTestBackup(language, backupOverwrite);
       if (res) {
-        setBackupStatus(
+        const message =
           res.overwritten > 0
             ? t("settings.backupImportedWithOverwrite", {
                 imported: res.imported,
@@ -117,18 +119,19 @@ export function SettingsDialog({
             : t("settings.backupImported", {
                 imported: res.imported,
                 skipped: res.skipped,
-              }),
-        );
+              });
+        setBackupStatus(message);
+        toast.success(message);
         if (res.imported > 0) {
           onBackupImported?.();
         }
       }
     } catch (error) {
-      setBackupStatus(
-        t("settings.backupFailed", {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      const message = t("settings.backupFailed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      setBackupStatus(message);
+      toast.error(message);
     } finally {
       setBackupAction(null);
     }

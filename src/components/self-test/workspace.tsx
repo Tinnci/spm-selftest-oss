@@ -27,6 +27,7 @@ export function SelfTestWorkspace({
           <WorkspaceHeading
             title={t("nav.selftest")}
             description={t("selftest.description")}
+            actions={collection}
           />
           {notice}
           <div className="selftest-workspace">
@@ -35,10 +36,7 @@ export function SelfTestWorkspace({
           </div>
         </div>
       </div>
-      <div className="selftest-dock">
-        {collection}
-        {checks}
-      </div>
+      <div className="selftest-dock">{checks}</div>
     </main>
   );
 }

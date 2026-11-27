@@ -82,7 +82,7 @@ describe("App shell", () => {
     ).toBeTruthy();
   });
 
-  it("starts with groups collapsed and opens them on hover or click", async () => {
+  it("starts with groups collapsed and opens them on click", async () => {
     render(<App />);
     const user = userEvent.setup();
     await user.click(screen.getAllByRole("button", { name: "Settings" })[0]);
@@ -92,8 +92,8 @@ describe("App shell", () => {
     const appearance = within(dialog).getByText("Appearance");
     const appearanceGroup = appearance.closest("details");
     await user.hover(appearance);
-    await waitFor(() => expect(appearanceGroup?.open).toBe(true));
-    await user.unhover(appearance);
+    expect(appearanceGroup?.open).toBe(false);
+    await user.click(appearance);
     expect(appearanceGroup?.open).toBe(true);
     expect(within(dialog).getByRole("button", { name: "Light" })).toBeTruthy();
     await user.click(appearance);
@@ -154,8 +154,8 @@ describe("App shell", () => {
       "Build",
     );
     const gms = screen.getByText("GMS & Baseline · Fields and order");
-    await user.hover(gms);
-    await waitFor(() => expect(gms.closest("details")?.open).toBe(true));
+    await user.click(gms);
+    expect(gms.closest("details")?.open).toBe(true);
     await user.click(
       screen.getByRole("button", { name: "Move Record name up" }),
     );
