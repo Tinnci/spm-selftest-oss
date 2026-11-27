@@ -342,14 +342,32 @@ export function LauncherLayoutPanel({
                           item.item_type === "folder"
                             ? (folders.byId.get(item.id) ?? [])
                             : [];
+                        const maxCols = Math.max(1, layout.grid_columns);
+                        const maxRows = Math.max(1, layout.grid_rows);
+                        const colStart = Math.min(
+                          Math.max(1, item.cell_x + 1),
+                          maxCols,
+                        );
+                        const rowStart = Math.min(
+                          Math.max(1, item.cell_y + 1),
+                          maxRows,
+                        );
+                        const colSpan = Math.min(
+                          Math.max(1, item.span_x),
+                          maxCols - colStart + 1,
+                        );
+                        const rowSpan = Math.min(
+                          Math.max(1, item.span_y),
+                          maxRows - rowStart + 1,
+                        );
                         return (
                           <button
                             key={key}
                             type="button"
                             className={`selftest-launcher-tile is-${item.item_type}${gemini ? " is-gemini" : ""}${selected ? " is-selected" : ""}`}
                             style={{
-                              gridColumn: `${Math.max(1, item.cell_x + 1)} / span ${Math.max(1, item.span_x)}`,
-                              gridRow: `${Math.max(1, item.cell_y + 1)} / span ${Math.max(1, item.span_y)}`,
+                              gridColumn: `${colStart} / span ${colSpan}`,
+                              gridRow: `${rowStart} / span ${rowSpan}`,
                             }}
                             title={`${itemLabel(item)} (${item.cell_x},${item.cell_y})`}
                             onClick={() => selectItem(item)}

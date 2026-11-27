@@ -314,6 +314,7 @@ export function RecordSidebar({
               {group.items.map((rec) => (
                 <li
                   key={rec.id}
+                  data-status={rec.check_status}
                   className={`selftest-record-item${selectedId === rec.id ? " is-active" : ""}${compareId === rec.id ? " is-baseline" : ""}`}
                 >
                   <ContextTarget
@@ -361,6 +362,14 @@ export function RecordSidebar({
                           </time>
                         </div>
                         <div className="selftest-record-badges">
+                          {compareId === rec.id ? (
+                            <Badge
+                              variant="secondary"
+                              className="selftest-badge-baseline"
+                            >
+                              {t("selftest.diffBaseline")}
+                            </Badge>
+                          ) : null}
                           {recordTags.checks ? (
                             <Badge
                               variant={checkStatusVariant(rec.check_status)}

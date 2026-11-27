@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useHorizontalScroll } from "@/hooks/useHorizontalScroll";
 
@@ -8,6 +8,7 @@ export type ScrollableTabItem<T extends string> = {
   icon?: ReactNode;
   tabId?: string;
   panelId?: string;
+  dot?: "error" | "warn" | "info";
 };
 
 function moveTabFocus(event: KeyboardEvent<HTMLDivElement>) {
@@ -47,6 +48,37 @@ export function ScrollableTabs<T extends string>({
   scrollKey?: string;
 }) {
   const tabsRef = useHorizontalScroll<HTMLDivElement>();
+  const [indicator, setIndicator] = useState<{
+    left: number;
+    width: number;
+  } | null>(null);
+
+  const syncIndicator = useCallback(() => {
+    const container = tabsRef.current;
+    const activeTab = container?.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-selected="true"]',
+    );
+    if (!container || !activeTab) {
+      setIndicator(null);
+      return;
+    }
+    setIndicator({
+      left: activeTab.offsetLeft,
+      width: activeTab.offsetWidth,
+    });
+  }, [tabsRef]);
+
+  useEffect(() => {
+    syncIndicator();
+    const container = tabsRef.current;
+    if (!container) return;
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(syncIndicator)
+        : null;
+    observer?.observe(container);
+    return () => observer?.disconnect();
+  }, [value, scrollKey, tabs.length, syncIndicator, tabsRef]);
 
   useEffect(() => {
     const activeTab = tabsRef.current?.querySelector<HTMLButtonElement>(
@@ -88,9 +120,25 @@ export function ScrollableTabs<T extends string>({
           >
             {tab.icon}
             {tab.label}
+            {tab.dot ? (
+              <span
+                className={`selftest-tab-dot is-${tab.dot}`}
+                aria-hidden="true"
+              />
+            ) : null}
           </button>
         );
       })}
+      {indicator && indicator.width > 0 ? (
+        <span
+          className="selftest-tabs-indicator"
+          aria-hidden="true"
+          style={{
+            transform: `translateX(${indicator.left}px)`,
+            width: `${indicator.width}px`,
+          }}
+        />
+      ) : null}
     </div>
   );
 }

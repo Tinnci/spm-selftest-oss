@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -720,21 +727,23 @@ export function SelfTestPage({
     ? records.find((record) => record.id === compareId)
     : undefined;
 
+  const deferredListFilter = useDeferredValue(listFilter);
+
   const filteredPackages = useMemo(() => {
     if (!detail) return [];
-    const q = listFilter.trim().toLowerCase();
+    const q = deferredListFilter.trim().toLowerCase();
     return q
       ? detail.packages.filter((p) => p.toLowerCase().includes(q))
       : detail.packages;
-  }, [detail, listFilter]);
+  }, [detail, deferredListFilter]);
 
   const filteredFeatures = useMemo(() => {
     if (!detail) return [];
-    const q = listFilter.trim().toLowerCase();
+    const q = deferredListFilter.trim().toLowerCase();
     return q
       ? detail.features.filter((f) => f.toLowerCase().includes(q))
       : detail.features;
-  }, [detail, listFilter]);
+  }, [detail, deferredListFilter]);
 
   const compareCandidates = useMemo(() => {
     const model = detail?.model_code || detail?.fields.model || "";
@@ -1307,6 +1316,11 @@ export function SelfTestPage({
                 label: t("selftest.tab.gms"),
                 tabId: "selftest-tab-gms",
                 panelId: "selftest-panel-gms",
+                dot: checkGroups.error.length
+                  ? ("error" as const)
+                  : checkGroups.warn.length
+                    ? ("warn" as const)
+                    : undefined,
               },
               {
                 id: "drm",
@@ -1357,6 +1371,7 @@ export function SelfTestPage({
                       label: t("selftest.tab.diff"),
                       tabId: "selftest-tab-diff",
                       panelId: "selftest-panel-diff",
+                      dot: diffTotal > 0 ? ("info" as const) : undefined,
                     } satisfies ScrollableTabItem<DetailTab>,
                   ]
                 : []),

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fs::{self, File};
-use std::io::{Read, Write};
-use std::path::Path;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
 
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -37,7 +37,7 @@ struct ArchiveManifest {
     reviews: usize,
 }
 
-fn collect_json_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>, SelfTestError> {
+fn collect_json_paths(dir: &Path) -> Result<Vec<(String, PathBuf)>, SelfTestError> {
     if !dir.exists() {
         return Ok(Vec::new());
     }
@@ -56,9 +56,7 @@ fn collect_json_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>, SelfTestErro
         if !name.ends_with(".json") {
             continue;
         }
-        let bytes =
-            fs::read(&path).map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?;
-        entries.push((name.to_owned(), bytes));
+        entries.push((name.to_owned(), path));
     }
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(entries)
@@ -137,9 +135,9 @@ fn rebuild_index(root_dir: &Path) -> Result<(), SelfTestError> {
 fn write_zip_entries(
     tmp_path: &Path,
     manifest_bytes: &[u8],
-    records: &[(String, Vec<u8>)],
-    blobs: &[(String, Vec<u8>)],
-    reviews: &[(String, Vec<u8>)],
+    records: &[(String, PathBuf)],
+    blobs: &[(String, PathBuf)],
+    reviews: &[(String, PathBuf)],
 ) -> Result<(), SelfTestError> {
     let file = File::create(tmp_path)
         .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?;
@@ -154,12 +152,13 @@ fn write_zip_entries(
         .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?;
 
     for (folder, entries) in [("records", records), ("blobs", blobs), ("reviews", reviews)] {
-        for (name, bytes) in entries {
+        for (name, path) in entries {
             writer
                 .start_file(format!("{folder}/{name}"), opts)
                 .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?;
-            writer
-                .write_all(bytes)
+            let mut src = File::open(path)
+                .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?;
+            io::copy(&mut src, &mut writer)
                 .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?;
         }
     }
@@ -179,9 +178,9 @@ pub fn export_backup_zip(
         fs::create_dir_all(parent)
             .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?;
     }
-    let records = collect_json_files(&root_dir.join("records"))?;
-    let blobs = collect_json_files(&root_dir.join("blobs"))?;
-    let reviews = collect_json_files(&root_dir.join("reviews"))?;
+    let records = collect_json_paths(&root_dir.join("records"))?;
+    let blobs = collect_json_paths(&root_dir.join("blobs"))?;
+    let reviews = collect_json_paths(&root_dir.join("reviews"))?;
     let manifest = ArchiveManifest {
         schema_version: 1,
         app: "spm-selftest".to_owned(),

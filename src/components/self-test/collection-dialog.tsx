@@ -76,27 +76,42 @@ export function CollectionDialog({
     if (!env.adb_found) {
       return {
         tone: "outline" as const,
+        status: "idle" as const,
         label: t("selftest.adbMissing"),
+      };
+    }
+    if (!env.devices.length) {
+      return {
+        tone: "outline" as const,
+        status: "idle" as const,
+        label: t("selftest.noDevices"),
       };
     }
     if (!readyDevices.length) {
       return {
         tone: "outline" as const,
-        label: t("selftest.noDevices"),
+        status: "warn" as const,
+        label: env.devices[0]?.state ?? t("selftest.noDevices"),
       };
     }
     const label =
       selectedDevice && selectedDevice.state === "device"
         ? selectedDevice.model || selectedDevice.serial
         : `${readyDevices.length} ${t("selftest.adbReady")}`;
-    return { tone: "secondary" as const, label };
+    return { tone: "secondary" as const, status: "ready" as const, label };
   })();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <div className="selftest-header-collect">
         {headerBadge ? (
-          <Badge variant={headerBadge.tone}>{headerBadge.label}</Badge>
+          <Badge variant={headerBadge.tone}>
+            <span
+              className={`selftest-status-dot is-${headerBadge.status}`}
+              aria-hidden="true"
+            />
+            {headerBadge.label}
+          </Badge>
         ) : null}
         <DialogTrigger
           render={

@@ -6,6 +6,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { KeyValueList } from "../src/components/self-test/key-value-list";
+import { ScrollableTabs } from "../src/components/ui/scrollable-tabs";
 import { ToastProvider } from "../src/components/ui/toast";
 import { useCopyWithToast } from "../src/hooks/useCopyWithToast";
 
@@ -55,5 +57,43 @@ describe("useCopyWithToast", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     expect(await screen.findByText("复制失败")).toBeTruthy();
+  });
+
+  it("morphs KeyValueList copy button into copied state", async () => {
+    copyText.mockResolvedValue(undefined);
+    render(
+      <ToastProvider>
+        <KeyValueList
+          items={[{ key: "build", label: "Build", value: "B123" }]}
+        />
+      </ToastProvider>,
+    );
+
+    const btn = screen.getByRole("button", { name: /Build/ });
+    fireEvent.click(btn);
+    await waitFor(() => {
+      expect(btn.classList.contains("is-copied")).toBe(true);
+    });
+  });
+
+  it("renders tab status dots and supports keyboard navigation in ScrollableTabs", () => {
+    const onChange = vi.fn();
+    render(
+      <ScrollableTabs
+        ariaLabel="Detail tabs"
+        value="gms"
+        onChange={onChange}
+        tabs={[
+          { id: "gms", label: "GMS", dot: "error" },
+          { id: "drm", label: "DRM" },
+        ]}
+      />,
+    );
+
+    const gmsTab = screen.getByRole("tab", { name: "GMS" });
+    expect(gmsTab.querySelector(".selftest-tab-dot.is-error")).toBeTruthy();
+    gmsTab.focus();
+    fireEvent.keyDown(gmsTab, { key: "ArrowRight" });
+    expect(onChange).toHaveBeenCalledWith("drm");
   });
 });

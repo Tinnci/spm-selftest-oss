@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SelfTestSummary } from "@/api/self_test";
 import { localDate } from "@/selftest/date";
@@ -6,6 +6,7 @@ import { localDate } from "@/selftest/date";
 export function useRecordBrowser(records: SelfTestSummary[]) {
   const { t } = useTranslation();
   const [recordQuery, setRecordQuery] = useState("");
+  const deferredQuery = useDeferredValue(recordQuery);
   const [recordSort, setRecordSort] = useState<"newest" | "oldest">("newest");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState("all");
@@ -13,7 +14,7 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
   const [reviewFilter, setReviewFilter] = useState("all");
 
   const filteredRecords = useMemo(() => {
-    const q = recordQuery.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     return records
       .filter((record) => {
         if (typeFilter !== "all" && record.test_type !== typeFilter)
@@ -34,7 +35,7 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
       );
   }, [
     records,
-    recordQuery,
+    deferredQuery,
     typeFilter,
     resultFilter,
     reviewFilter,
