@@ -3993,6 +3993,7 @@ dependencies = [
  "clap",
  "encoding_rs",
  "futures-util",
+ "quick-xml 0.42.0",
  "regex",
  "reqwest",
  "rust_xlsxwriter",

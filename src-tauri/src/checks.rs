@@ -414,6 +414,7 @@ mod tests {
             packages: vec![],
             features: vec![],
             launcher_layout: None,
+            hardware: None,
             checks: vec![],
             review: crate::review::ReviewLedger::default(),
             artifacts: crate::review::Artifacts::default(),

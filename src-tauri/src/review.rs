@@ -514,6 +514,7 @@ mod tests {
             packages: Vec::new(),
             features: Vec::new(),
             launcher_layout: None,
+            hardware: None,
             review: ReviewLedger::default(),
             artifacts: Artifacts::default(),
         }

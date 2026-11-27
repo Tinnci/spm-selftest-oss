@@ -138,6 +138,15 @@ export type ReviewStatusSummary = {
   counts: ReviewCounts;
 };
 
+export type HardwareSnapshot = {
+  active: Record<string, { source: string; status: string; values: string[] }>;
+  inventory: Record<string, string[]>;
+  inventory_sources: Record<string, Record<string, string>>;
+  mmi: Record<string, string>;
+  mmi_status: string;
+  issues: string[];
+};
+
 export type SelfTestRecord = {
   id: string;
   collected_at: string;
@@ -161,6 +170,7 @@ export type SelfTestRecord = {
   packages: string[];
   features: string[];
   launcher_layout?: LauncherLayout | null;
+  hardware?: HardwareSnapshot | null;
   review?: ReviewLedger;
   artifacts?: Artifacts;
 };

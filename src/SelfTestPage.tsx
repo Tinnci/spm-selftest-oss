@@ -103,7 +103,8 @@ import { TEST_TYPES } from "./selftest/constants";
 import { localDate } from "./selftest/date";
 import { useRecordBrowser } from "./hooks/useRecordBrowser";
 
-type DetailTab = "gms" | "drm" | "packages" | "features" | "launcher" | "diff";
+type DetailTab =
+  "gms" | "drm" | "hardware" | "packages" | "features" | "launcher" | "diff";
 
 const CHECK_FIELD: Record<string, string> = {
   patch_format: "patch",
@@ -1486,6 +1487,20 @@ export function SelfTestPage({
             >
               {t("selftest.tab.drm")}
             </button>
+            {detail.hardware ? (
+              <button
+                type="button"
+                role="tab"
+                id="selftest-tab-hardware"
+                aria-controls="selftest-panel-hardware"
+                aria-selected={detailTab === "hardware"}
+                tabIndex={detailTab === "hardware" ? 0 : -1}
+                className={detailTab === "hardware" ? "is-active" : ""}
+                onClick={() => setDetailTab("hardware")}
+              >
+                {t("selftest.hardware.tab")}
+              </button>
+            ) : null}
             <button
               type="button"
               role="tab"
@@ -1631,6 +1646,90 @@ export function SelfTestPage({
                   <pre>{sec.lines.join("\n")}</pre>
                 </section>
               ))}
+            </div>
+          ) : null}
+
+          {detailTab === "hardware" && detail.hardware ? (
+            <div
+              className="selftest-drm"
+              role="tabpanel"
+              id="selftest-panel-hardware"
+              aria-labelledby="selftest-tab-hardware"
+              tabIndex={0}
+            >
+              {detail.hardware.issues.map((issue) => (
+                <p className="quiet" key={issue}>
+                  {t("selftest.hardware.issue", {
+                    section: t(`selftest.hardware.${issue}`),
+                  })}
+                </p>
+              ))}
+              <section className="selftest-drm-section">
+                <h4>{t("selftest.hardware.active")}</h4>
+                <dl className="selftest-fields">
+                  {Object.entries(detail.hardware.active).map(([key, read]) => (
+                    <div className="selftest-field-row" key={key}>
+                      <dt>
+                        {t(`selftest.hardware.field.${key}`, {
+                          defaultValue: key,
+                        })}
+                      </dt>
+                      <dd>
+                        <span title={read.source}>
+                          {read.values.length
+                            ? read.values.join(" · ")
+                            : t(`selftest.hardware.status.${read.status}`)}
+                        </span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+              <section className="selftest-drm-section">
+                <h4>
+                  {t("selftest.hardware.mmi")} ·{" "}
+                  {t(`selftest.hardware.status.${detail.hardware.mmi_status}`)}
+                </h4>
+                <dl className="selftest-fields">
+                  {Object.entries(detail.hardware.mmi).map(([key, value]) => (
+                    <div className="selftest-field-row" key={key}>
+                      <dt>
+                        {t(`selftest.hardware.field.${key}`, {
+                          defaultValue: key,
+                        })}
+                      </dt>
+                      <dd>
+                        <span>{value.replaceAll("\n", " · ")}</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+              <section className="selftest-drm-section">
+                <h4>{t("selftest.hardware.inventory")}</h4>
+                {Object.entries(detail.hardware.inventory_sources).map(
+                  ([group, sources]) => {
+                    const paths = detail.hardware?.inventory[group] ?? [];
+                    return (
+                      <details key={group}>
+                        <summary>
+                          {t(`selftest.hardware.group.${group}`)} (
+                          {paths.length})
+                        </summary>
+                        <pre>
+                          {Object.entries(sources)
+                            .map(
+                              ([path, status]) =>
+                                `${path} · ${t(`selftest.hardware.status.${status}`)}`,
+                            )
+                            .join("\n")}
+                        </pre>
+                        {paths.length ? <pre>{paths.join("\n")}</pre> : null}
+                      </details>
+                    );
+                  },
+                )}
+              </section>
             </div>
           ) : null}
 

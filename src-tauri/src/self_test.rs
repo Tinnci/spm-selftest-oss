@@ -8,12 +8,14 @@ mod adb;
 mod collector;
 mod diff;
 mod exporter;
+mod hardware;
 mod launcher;
 mod storage;
 pub use adb::*;
 pub use collector::*;
 pub use diff::*;
 pub use exporter::*;
+pub use hardware::*;
 pub use launcher::*;
 pub use storage::*;
 
@@ -110,6 +112,8 @@ pub struct SelfTestRecord {
     pub features: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launcher_layout: Option<LauncherLayout>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hardware: Option<HardwareSnapshot>,
     #[serde(default)]
     pub review: ReviewLedger,
     #[serde(default)]
@@ -170,6 +174,8 @@ struct StoredSelfTestRecord {
     pub features: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launcher_layout: Option<LauncherLayout>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hardware: Option<HardwareSnapshot>,
     #[serde(default)]
     pub review: ReviewLedger,
     #[serde(default)]
@@ -336,6 +342,7 @@ fn load_record_raw(id: &str) -> Result<SelfTestRecord, SelfTestError> {
         packages,
         features,
         launcher_layout: stored.launcher_layout,
+        hardware: stored.hardware,
         review: stored.review,
         artifacts: stored.artifacts,
     })
@@ -543,6 +550,7 @@ pub async fn self_test_run(
     }
 
     let launcher_layout = Some(collect_launcher_layout(&adb, &serial).await);
+    let hardware = Some(collect_hardware(&adb, &serial, &prop_map).await);
 
     let now = chrono::Local::now();
     let id = now.format("%Y%m%d-%H%M%S-%3f").to_string();
@@ -575,6 +583,7 @@ pub async fn self_test_run(
         packages,
         features,
         launcher_layout,
+        hardware,
         review: ReviewLedger::default(),
         artifacts: Artifacts::default(),
     };
@@ -1041,6 +1050,7 @@ mod tests {
             packages: vec!["com.a".into()],
             features: vec!["android.hardware.drm".into()],
             launcher_layout: None,
+            hardware: None,
             review: ReviewLedger::default(),
             artifacts: Artifacts::default(),
         }
