@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -31,6 +33,7 @@ jobs:
 
       - run: npm ci
       - run: npm run check:versions
+      - run: node --test scripts/release-checks.mjs
       - run: npm run lint
       - run: npm run lint:comments
       - run: npm run format:check
@@ -44,16 +47,26 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  native-check:
-    name: Native checks (${{ matrix.os }})
+  native:
+    name: Native checks and build (${{ matrix.os }})
+    needs: frontend
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            extension: ''
+          - os: windows-latest
+            extension: .exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - run: node -e "require('fs').mkdirSync('dist',{recursive:true})"
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: dist/
 
       - name: Install Tauri system dependencies
         if: runner.os == 'Linux'
@@ -63,7 +76,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.99.0
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -79,38 +92,7 @@ jobs:
         run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Rust tests
-        if: runner.os == 'Linux'
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-
-  native:
-    name: Native build (${{ matrix.os }})
-    needs: [frontend, native-check]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: frontend-dist
-          path: dist/
-
-      - name: Install Tauri system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-          shared-key: native-debug-${{ runner.os }}
 
       - name: Build desktop and CLI
         run: cargo build --locked --manifest-path src-tauri/Cargo.toml --bins
@@ -120,7 +102,5 @@ jobs:
           name: spm-selftest-${{ runner.os }}-debug
           if-no-files-found: error
           path: |
-            src-tauri/target/debug/spm-selftest
-            src-tauri/target/debug/spm-selftest.exe
-            src-tauri/target/debug/spm-selftest-cli
-            src-tauri/target/debug/spm-selftest-cli.exe
+            src-tauri/target/debug/spm-selftest${{ matrix.extension }}
+            src-tauri/target/debug/spm-selftest-cli${{ matrix.extension }}

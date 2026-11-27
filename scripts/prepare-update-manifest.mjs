@@ -1,48 +1,60 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 const [manifestPath, assetsPath, repository, tag] = process.argv.slice(2);
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const assets = JSON.parse(readFileSync(assetsPath, "utf8"));
-const version = tag.replace(/^v/, "");
-const releasePath = `/${repository}/releases/download/${tag}/`;
-const apiPath = `/repos/${repository}/releases/assets/`;
+const version = tag.slice(1);
+const baseUrl = `https://github.com/${repository}/releases/download/${tag}/`;
+const available = new Set(
+  assets
+    .filter(({ state, size }) => state === "uploaded" && size > 0)
+    .map(({ name }) => name),
+);
+const targets = [
+  ["linux-x86_64", "appimage", ["amd64.AppImage"]],
+  ["windows-x86_64", "nsis", ["x64-setup.exe"]],
+  ["windows-aarch64", "nsis", ["arm64-setup.exe", "aarch64-setup.exe"]],
+];
 
-if (manifest.version.replace(/^v/, "") !== version) {
-  throw new Error("Update manifest does not match the release tag");
-}
-if (
-  !manifest.platforms["linux-x86_64"] ||
-  !manifest.platforms["windows-x86_64"]
-) {
-  throw new Error("Update manifest must include both Linux and Windows");
-}
-
-for (const [platform, entry] of Object.entries(manifest.platforms)) {
-  const url = new URL(entry.url);
-  const asset =
-    url.hostname === "api.github.com" && url.pathname.startsWith(apiPath)
-      ? assets.find((asset) => url.pathname === `${apiPath}${asset.id}`)
-      : assets.find(
-          (asset) =>
-            url.hostname === "github.com" &&
-            (decodeURIComponent(url.pathname) ===
-              `${releasePath}${asset.name}` ||
-              url.href === asset.browser_download_url),
-        );
-  const valid =
-    (platform.startsWith("linux-x86_64") &&
-      asset?.name.endsWith(".AppImage")) ||
-    (platform.startsWith("windows-x86_64") &&
-      asset?.name.endsWith("-setup.exe"));
-  if (
-    !valid ||
-    !entry.signature?.trim() ||
-    !assets.some((item) => item.name === `${asset.name}.sig`)
-  ) {
+const platforms = {};
+for (const [platform, bundle, suffixes] of targets) {
+  const matches = [...available].filter((name) =>
+    suffixes.some((suffix) => name.endsWith(`_${version}_${suffix}`)),
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected one ${bundle} asset for ${platform}, found ${matches.length}`,
+    );
+  }
+  const [name] = matches;
+  const signatureName = `${name}.sig`;
+  if (!available.has(signatureName) || basename(name) !== name) {
     throw new Error(`Missing signed release asset for ${platform}`);
   }
-  entry.url = `https://github.com${releasePath}${encodeURIComponent(asset.name)}`;
+  const signature = readFileSync(
+    join(dirname(manifestPath), signatureName),
+    "utf8",
+  ).trim();
+  if (!signature) throw new Error(`Empty signature for ${platform}`);
+
+  if (bundle === "nsis") {
+    for (const extension of ["exe", "zip", "sha256"]) {
+      const portable = `SPM-SelfTest-${version}-${platform}.${extension}`;
+      if (!available.has(portable))
+        throw new Error(`Missing portable asset ${portable}`);
+    }
+  }
+
+  const entry = { url: `${baseUrl}${encodeURIComponent(name)}`, signature };
+  platforms[platform] = entry;
+  platforms[`${platform}-${bundle}`] = entry;
 }
 
+const manifest = {
+  version,
+  notes: `SPM Self-Test ${tag}`,
+  pub_date: new Date().toISOString(),
+  platforms,
+};
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

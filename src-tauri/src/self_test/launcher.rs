@@ -102,9 +102,7 @@ fn extract_attr(line: &str, key: &str) -> Option<String> {
         let end = after_quote.find('"')?;
         return Some(after_quote[..end].to_owned());
     }
-    let end = rest
-        .find(|c: char| c == ' ' || c == ',' || c == ')' || c == ']')
-        .unwrap_or(rest.len());
+    let end = rest.find([' ', ',', ')', ']']).unwrap_or(rest.len());
     let val = rest[..end].trim();
     (!val.is_empty()).then(|| val.to_owned())
 }

@@ -100,11 +100,16 @@ export function recordMarkdown(record: SelfTestRecord): string {
     for (const item of layout.items) {
       if (item.container !== "workspace") continue;
       const list = byScreen.get(item.screen) ?? [];
-      const label = item.title || item.package || item.component || `#${item.id}`;
-      list.push(`${label} (${item.cell_x},${item.cell_y} ${item.span_x}x${item.span_y})`);
+      const label =
+        item.title || item.package || item.component || `#${item.id}`;
+      list.push(
+        `${label} (${item.cell_x},${item.cell_y} ${item.span_x}x${item.span_y})`,
+      );
       byScreen.set(item.screen, list);
     }
-    for (const [screen, items] of [...byScreen.entries()].sort((a, b) => a[0] - b[0])) {
+    for (const [screen, items] of [...byScreen.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
       sections.push(`- Screen ${screen + 1}: ${items.join(", ")}`);
     }
   }

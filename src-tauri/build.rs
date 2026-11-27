@@ -24,8 +24,14 @@ fn emit_git_version() {
         (Some(r), None) => format!("{pkg} (r{r})"),
         (None, None) => pkg,
     };
-    println!("cargo:rustc-env=SELFTEST_GIT_SHA={}", sha.unwrap_or_default());
-    println!("cargo:rustc-env=SELFTEST_GIT_REV={}", rev.unwrap_or_default());
+    println!(
+        "cargo:rustc-env=SELFTEST_GIT_SHA={}",
+        sha.unwrap_or_default()
+    );
+    println!(
+        "cargo:rustc-env=SELFTEST_GIT_REV={}",
+        rev.unwrap_or_default()
+    );
     println!("cargo:rustc-env=SELFTEST_DISPLAY_VERSION={display}");
 }
 

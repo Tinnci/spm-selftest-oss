@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   NPM_CONFIG_REGISTRY: https://registry.npmjs.org
@@ -20,6 +20,7 @@ env:
 jobs:
   frontend:
     name: Build release frontend
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -49,10 +50,44 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  draft:
+    name: Prepare draft release
+    needs: frontend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.draft.outputs.release-id }}
+    steps:
+      - name: Create or reuse draft
+        id: draft
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft="$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.tag_name == env.GITHUB_REF_NAME) | [.id, .draft] | @tsv')"
+          if [[ "$draft" == *$'\tfalse' ]]; then
+            echo "::error::Release $GITHUB_REF_NAME is already published."
+            exit 1
+          fi
+          if [[ -n "$draft" ]]; then
+            release_id="${draft%%$'\t'*}"
+          else
+            flags=()
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft \
+              --generate-notes --title "SPM Self-Test $GITHUB_REF_NAME" "${flags[@]}"
+            release_id="$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.tag_name == env.GITHUB_REF_NAME and .draft) | .id')"
+          fi
+          [[ "$release_id" =~ ^[0-9]+$ ]]
+          echo "release-id=$release_id" >> "$GITHUB_OUTPUT"
+
   build:
     name: Signed desktop bundle (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: frontend
+    needs: draft
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -60,12 +95,15 @@ jobs:
           - os: windows-latest
             bundle: nsis
             arch_label: windows-x86_64
+            runner_arch: X64
           - os: windows-11-arm
             bundle: nsis
             arch_label: windows-aarch64
+            runner_arch: ARM64
           - os: ubuntu-22.04
             bundle: appimage
             arch_label: linux-x86_64
+            runner_arch: X64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -76,6 +114,12 @@ jobs:
         with:
           name: release-frontend-dist
           path: dist/
+
+      - name: Verify runner architecture
+        shell: bash
+        env:
+          EXPECTED_ARCH: ${{ matrix.runner_arch }}
+        run: test "$RUNNER_ARCH" = "$EXPECTED_ARCH"
 
       - if: runner.os == 'Linux'
         name: Install Tauri system dependencies
@@ -95,22 +139,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
-          shared-key: tauri-release-${{ runner.os }}
+          shared-key: tauri-release-${{ matrix.arch_label }}
 
       - run: npm ci
 
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: SPM Self-Test ${{ github.ref_name }}
-          releaseBody: Windows x64 NSIS and Linux x86_64 AppImage.
-          releaseDraft: true
-          prerelease: false
-          uploadUpdaterJson: true
+          releaseId: ${{ needs.draft.outputs.release-id }}
+          uploadUpdaterJson: false
           args: >-
             --config src-tauri/tauri.release.conf.json
             --config src-tauri/tauri.prebuilt.conf.json
@@ -122,10 +162,11 @@ jobs:
         shell: pwsh
         env:
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          ARCH_LABEL: ${{ matrix.arch_label }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          $name = "SPM-SelfTest-$version-${{ matrix.arch_label }}"
+          $name = "SPM-SelfTest-$version-$env:ARCH_LABEL"
           $bundleDir = Join-Path $env:RUNNER_TEMP "$name-bundle"
           $portable = Join-Path $env:RUNNER_TEMP "$name.exe"
           $zip = Join-Path $env:RUNNER_TEMP "$name.zip"
@@ -144,27 +185,33 @@ jobs:
           gh release upload "$env:GITHUB_REF_NAME" $portable $zip $checksum --clobber
 
   manifest:
-    name: Validate updater manifest
-    needs: build
+    name: Verify assets and publish
+    needs: [draft, build]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
-      - name: Verify both targets and set public asset URLs
+      - name: Generate updater manifest and publish
         env:
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.draft.outputs.release-id }}
         run: |
           manifest_dir="$(mktemp -d)"
-          gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir "$manifest_dir"
-          gh api "repos/$GH_REPO/releases" | jq --arg tag "$GITHUB_REF_NAME" '.[] | select(.tag_name == $tag) | .assets' > "$manifest_dir/assets.json"
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets?per_page=100" > "$manifest_dir/assets.json"
+          gh release download "$GITHUB_REF_NAME" --pattern '*.sig' --dir "$manifest_dir"
           node scripts/prepare-update-manifest.mjs "$manifest_dir/latest.json" "$manifest_dir/assets.json" "$GH_REPO" "$GITHUB_REF_NAME"
           gh release upload "$GITHUB_REF_NAME" "$manifest_dir/latest.json" --clobber
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          fi

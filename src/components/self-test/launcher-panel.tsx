@@ -97,7 +97,11 @@ export function LauncherLayoutPanel({
     for (const item of layout.items) {
       if (!isGeminiItem(item)) continue;
       if (item.container === "hotseat") {
-        return { ok: true, screen: "Hotseat", screenIndex: null as number | null };
+        return {
+          ok: true,
+          screen: "Hotseat",
+          screenIndex: null as number | null,
+        };
       }
       if (item.container === "workspace") {
         return {
@@ -118,7 +122,8 @@ export function LauncherLayoutPanel({
               parent.container === "hotseat"
                 ? "Hotseat"
                 : String(parent.screen + 1),
-            screenIndex: parent.container === "workspace" ? parent.screen : null,
+            screenIndex:
+              parent.container === "workspace" ? parent.screen : null,
           };
         }
       }
@@ -274,7 +279,10 @@ export function LauncherLayoutPanel({
                       >
                         {t("selftest.launcher.screen", { index: screen + 1 })}
                         {hasGemini ? (
-                          <span className="selftest-launcher-dot" aria-hidden="true" />
+                          <span
+                            className="selftest-launcher-dot"
+                            aria-hidden="true"
+                          />
                         ) : null}
                       </button>
                     );
@@ -295,7 +303,9 @@ export function LauncherLayoutPanel({
                 {visibleScreens.map(([screen, items]) => (
                   <div key={screen} className="selftest-launcher-phone">
                     <div className="selftest-launcher-phone-head">
-                      <span>{t("selftest.launcher.screen", { index: screen + 1 })}</span>
+                      <span>
+                        {t("selftest.launcher.screen", { index: screen + 1 })}
+                      </span>
                       <span>
                         {layout.grid_columns}×{layout.grid_rows}
                       </span>
@@ -465,7 +475,8 @@ export function LauncherLayoutPanel({
                     <div className="selftest-launcher-folder-children">
                       <div className="selftest-launcher-screen-title">
                         {t("selftest.launcher.folderItems", {
-                          count: (folders.byId.get(selectedItem.id) ?? []).length,
+                          count: (folders.byId.get(selectedItem.id) ?? [])
+                            .length,
                         })}
                       </div>
                       <div className="selftest-launcher-child-chips">

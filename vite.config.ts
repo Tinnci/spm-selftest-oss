@@ -7,12 +7,17 @@ import tailwindcss from "@tailwindcss/vite";
 function resolveGitBuild(): string {
   const runGit = (args: string[]) => {
     try {
-      return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      return execFileSync("git", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
     } catch {
       return "";
     }
   };
-  const sha = runGit(["rev-parse", "--short=7", "HEAD"]) || (process.env.GITHUB_SHA ?? "").slice(0, 7);
+  const sha =
+    runGit(["rev-parse", "--short=7", "HEAD"]) ||
+    (process.env.GITHUB_SHA ?? "").slice(0, 7);
   const rev = runGit(["rev-list", "--count", "HEAD"]);
   if (rev && sha) return `r${rev} · ${sha}`;
   if (sha) return sha;
