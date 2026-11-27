@@ -217,34 +217,36 @@ export function DiffPanel({
             <div className="selftest-diff-sections">
               <div>
                 <h4>{t("selftest.diffKeyFields")}</h4>
-                <table className="selftest-diff-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">{t("selftest.diffFieldColumn")}</th>
-                      <th scope="col">{t("selftest.diffBaseline")}</th>
-                      <th scope="col">{t("selftest.diffTarget")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {diff.key_fields.map((field) => {
-                      const changed = field.left !== field.right;
-                      return (
-                        <tr
-                          key={field.key}
-                          className={changed ? "is-changed" : ""}
-                        >
-                          <th scope="row">
-                            {t(`selftest.field.${field.key}`)}
-                          </th>
-                          <td>{field.left || "-"}</td>
-                          <td className={changed ? "is-after" : ""}>
-                            {field.right || "-"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div className="selftest-table-scroll">
+                  <table className="selftest-diff-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("selftest.diffFieldColumn")}</th>
+                        <th scope="col">{t("selftest.diffBaseline")}</th>
+                        <th scope="col">{t("selftest.diffTarget")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {diff.key_fields.map((field) => {
+                        const changed = field.left !== field.right;
+                        return (
+                          <tr
+                            key={field.key}
+                            className={changed ? "is-changed" : ""}
+                          >
+                            <th scope="row">
+                              {t(`selftest.field.${field.key}`)}
+                            </th>
+                            <td>{field.left || "-"}</td>
+                            <td className={changed ? "is-after" : ""}>
+                              {field.right || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {(diffScope === "all" || diffScope === "fields") &&

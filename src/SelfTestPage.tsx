@@ -54,6 +54,7 @@ import { ChecksPanel } from "./components/self-test/checks-panel";
 import { DiffPanel } from "./components/self-test/diff-panel";
 import { LauncherLayoutPanel } from "./components/self-test/launcher-panel";
 import { RecordSidebar } from "./components/self-test/record-sidebar";
+import { useHorizontalScroll } from "./hooks/useHorizontalScroll";
 import { useSelfTestCollection } from "./hooks/useSelfTestCollection";
 import { copyText } from "./clipboard";
 import { revealPath } from "./api/shell";
@@ -1006,6 +1007,23 @@ export function SelfTestPage({
     return () => window.clearTimeout(timeout);
   }, [fieldTarget]);
 
+  const tabsRef = useHorizontalScroll<HTMLDivElement>();
+
+  useEffect(() => {
+    const activeTab = tabsRef.current?.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-selected="true"]',
+    );
+    if (!activeTab) return;
+    const reduceMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    activeTab.scrollIntoView?.({
+      inline: "nearest",
+      block: "nearest",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [detailTab, detail?.id, tabsRef]);
+
   const actionRef = useRef({
     run: collection.run,
     select: handleSelectRecord,
@@ -1457,6 +1475,7 @@ export function SelfTestPage({
           ) : null}
 
           <div
+            ref={tabsRef}
             className="selftest-tabs"
             role="tablist"
             aria-label={t("selftest.detailTabs")}

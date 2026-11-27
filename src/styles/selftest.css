@@ -3,6 +3,7 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
 }
 .selftest-field-label {
   color: var(--muted-foreground);
@@ -283,7 +284,8 @@
 }
 .selftest-editor {
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-gutter: stable;
   scroll-padding-bottom: var(--selftest-fab-clearance);
 }
@@ -308,7 +310,7 @@
 }
 .selftest-workspace {
   display: grid;
-  grid-template-columns: clamp(236px, 28%, 310px) minmax(0, 1fr);
+  grid-template-columns: clamp(240px, 26%, 300px) minmax(0, 1fr);
   gap: 12px;
   flex: 1;
   min-height: 0;
@@ -324,12 +326,24 @@
   border: 1px solid var(--line);
   border-radius: var(--card-radius);
   background: var(--card);
-  overflow: auto;
+}
+.selftest-sidebar {
+  overflow: hidden;
+}
+.selftest-sidebar-head {
+  flex: none;
+}
+.selftest-detail {
+  overflow-x: hidden;
+  overflow-y: auto;
+  container-type: inline-size;
+  container-name: detail;
 }
 .selftest-record-list {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 92px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 3px;
 }
 .selftest-detail {
@@ -345,11 +359,39 @@
   overflow-wrap: anywhere;
 }
 .selftest-detail-header .settings-actions {
-  align-self: center;
+  align-self: flex-start;
 }
 .selftest-tabs {
+  position: sticky;
+  top: calc(var(--selftest-panel-pad) * -1);
+  z-index: 3;
+  background: var(--card);
+  padding-top: 6px;
+  margin-top: -6px;
   flex-wrap: nowrap;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+}
+.selftest-tabs::-webkit-scrollbar {
+  display: none;
+}
+.selftest-tabs[data-scroll-left="true"] {
+  mask-image: linear-gradient(to right, transparent, #000 20px);
+}
+.selftest-tabs[data-scroll-right="true"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+}
+.selftest-tabs[data-scroll-left="true"][data-scroll-right="true"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 20px,
+    #000 calc(100% - 20px),
+    transparent
+  );
 }
 .selftest-tabs > button {
   white-space: nowrap;
@@ -468,7 +510,8 @@
   max-height: min(28dvh, 188px);
   margin: 0 auto;
   padding: 6px var(--page-pad-x) 8px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   list-style: none;
@@ -518,7 +561,8 @@
   gap: 12px;
   min-height: 0;
   padding: 0 18px 16px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
 }
 .selftest-collect-dialog .selftest-collect-footer {
@@ -736,10 +780,16 @@
   }
   .selftest-sidebar {
     max-height: clamp(200px, 44dvh, 380px);
+    overflow-y: auto;
   }
   .selftest-detail {
     overflow: visible;
     padding-bottom: var(--selftest-panel-pad);
+  }
+  .selftest-tabs {
+    position: static;
+    margin-top: 0;
+    padding-top: 0;
   }
 }
 @container (max-width: 570px) {
@@ -762,10 +812,16 @@
   }
   .selftest-sidebar {
     max-height: 360px;
+    overflow-y: auto;
   }
   .selftest-detail {
     overflow: visible;
     padding-bottom: var(--selftest-panel-pad);
+  }
+  .selftest-tabs {
+    position: static;
+    margin-top: 0;
+    padding-top: 0;
   }
 }
 
@@ -882,6 +938,12 @@
 .selftest-diff-scopes button.is-active span {
   color: inherit;
 }
+.selftest-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
 .selftest-diff-table {
   width: 100%;
   border-collapse: collapse;
@@ -970,6 +1032,12 @@
   }
 }
 
+@container (max-width: 960px) {
+  .selftest-launcher-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .selftest-launcher-stage,
 .selftest-launcher-inspector {
   display: flex;
@@ -1018,18 +1086,19 @@
 }
 
 .selftest-launcher-phones.is-multi {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
 }
 
 .selftest-launcher-phone {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-width: 100%;
   padding: 12px;
   border-radius: 18px;
   border: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--on-solid) 14%, transparent);
 }
 
 .selftest-launcher-phone-head {
@@ -1236,12 +1305,16 @@
 .selftest-launcher-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   gap: 2px;
   max-height: 270px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   font-size: 12px;
 }
 
@@ -1249,7 +1322,7 @@
   width: 100%;
   text-align: left;
   display: grid;
-  grid-template-columns: 116px minmax(96px, 1fr) minmax(120px, 1.5fr);
+  grid-template-columns: minmax(84px, 112px) minmax(0, 1fr) minmax(0, 1.35fr);
   gap: 8px;
   padding: 5px 8px;
   border: 0;
@@ -1257,6 +1330,13 @@
   background: transparent;
   color: var(--foreground);
   cursor: pointer;
+}
+
+.selftest-launcher-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .selftest-launcher-row:hover,
@@ -1270,4 +1350,54 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.selftest-meta-bar {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.selftest-meta-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.selftest-meta-row .selftest-field {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+}
+.selftest-meta-row .selftest-field-submit {
+  justify-self: end;
+}
+@container detail (max-width: 680px) {
+  .selftest-launcher-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container detail (max-width: 520px) {
+  .selftest-diff-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .selftest-diff-arrow {
+    display: none;
+  }
+  .selftest-diff-table tbody th {
+    width: auto;
+  }
+}
+@container detail (max-width: 440px) {
+  .selftest-field-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 6px 8px;
+  }
+  .selftest-field-row dt {
+    font-size: 11px;
+  }
+  .selftest-meta-row .selftest-field-submit {
+    justify-self: stretch;
+  }
 }

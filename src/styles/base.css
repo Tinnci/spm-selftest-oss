@@ -303,7 +303,8 @@ h1 {
 .window-scroll {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .appbar > :last-child:not(.window-controls) {
   margin-right: 24px;
@@ -1067,6 +1068,13 @@ button[data-slot="button"]:active:not(:disabled),
 .selftest-record-item {
   border: 1px solid var(--line);
   border-radius: 8px;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.selftest-record-item:hover:not(.is-active) {
+  border-color: color-mix(in srgb, var(--brand-soft) 55%, var(--line));
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
 }
 .selftest-record-item.is-active {
   border-color: var(--brand-soft);
@@ -1203,19 +1211,31 @@ button[data-slot="button"]:active:not(:disabled),
 }
 .selftest-field-row {
   display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr);
   gap: 10px;
-  padding: 4px 0;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--line);
+  border-radius: 6px;
   font-size: 13px;
+}
+.selftest-field-row:hover {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
 }
 .selftest-field-row dt {
   color: var(--muted-foreground);
 }
 .selftest-field-row dd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0;
   font-family: var(--mono);
   overflow-wrap: anywhere;
+}
+.selftest-field-row dd > span {
+  min-width: 0;
+  flex: 1;
 }
 .selftest-drm-facts {
   display: flex;
@@ -1235,7 +1255,9 @@ button[data-slot="button"]:active:not(:disabled),
   background: var(--muted, rgba(128, 128, 128, 0.08));
   font-family: var(--mono);
   font-size: 12px;
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   max-height: 240px;
 }
 .selftest-list-pane {
@@ -1246,14 +1268,19 @@ button[data-slot="button"]:active:not(:disabled),
 .selftest-mono-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
   font-family: var(--mono);
   font-size: 12px;
   max-height: 52dvh;
+  overflow-x: hidden;
   overflow-y: auto;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .selftest-short-input {
   width: 120px;
@@ -1488,8 +1515,10 @@ button[data-slot="button"]:active:not(:disabled),
 .selftest-copy-value {
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: 18px;
   height: 18px;
+  margin-top: 2px;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -1551,6 +1580,7 @@ button[data-slot="button"]:active:not(:disabled),
 .window-scroll {
   flex: 1;
   min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 .guide-page {
