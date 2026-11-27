@@ -153,10 +153,12 @@ export function SelfTestPage({
   onActivity,
   recordTags = DEFAULT_RECORD_TAGS,
   xlsx = DEFAULT_XLSX,
+  refreshKey = 0,
 }: {
   onActivity?: (busy: boolean) => void;
   recordTags?: RecordTagVisibility;
   xlsx?: XlsxPreferences;
+  refreshKey?: number;
 }) {
   useTranslation();
   const toast = useToast();
@@ -347,6 +349,13 @@ export function SelfTestPage({
     void refreshList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (refreshKey > 0) {
+      void refreshList();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   useEffect(() => {
     if (

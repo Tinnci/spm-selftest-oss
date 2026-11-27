@@ -5,6 +5,7 @@ use std::time::Duration;
 use crate::review::{self, Artifacts, ReviewLedger};
 
 mod adb;
+mod archive;
 mod collector;
 mod diff;
 mod exporter;
@@ -12,6 +13,7 @@ mod hardware;
 mod launcher;
 mod storage;
 pub use adb::*;
+pub use archive::*;
 pub use collector::*;
 pub use diff::*;
 pub use exporter::*;
@@ -839,6 +841,68 @@ pub fn self_test_diff(left_id: String, right_id: String) -> Result<SelfTestDiff,
 #[tauri::command]
 pub fn self_test_storage() -> Result<String, SelfTestError> {
     Ok(data_dir()?.display().to_string())
+}
+
+#[tauri::command]
+pub async fn self_test_backup_export(
+    app: tauri::AppHandle,
+    locale: Option<String>,
+) -> Result<Option<BackupArchiveSummary>, SelfTestError> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let zh = locale.as_deref() != Some("en");
+    let today = chrono::Utc::now().format("%Y%m%d").to_string();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title(if zh {
+            "导出全部自测数据备份 (ZIP)"
+        } else {
+            "Export all self-test data (ZIP)"
+        })
+        .add_filter("ZIP", &["zip"])
+        .set_file_name(format!("self-test-backup-{today}.zip"))
+        .save_file(move |path| {
+            let _ = tx.send(path);
+        });
+    let Some(path) = rx.await.ok().flatten().and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let root = data_dir()?;
+    tokio::task::spawn_blocking(move || export_backup_zip(&root, &path).map(Some))
+        .await
+        .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?
+}
+
+#[tauri::command]
+pub async fn self_test_backup_import(
+    app: tauri::AppHandle,
+    locale: Option<String>,
+    overwrite: Option<bool>,
+) -> Result<Option<BackupArchiveSummary>, SelfTestError> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let zh = locale.as_deref() != Some("en");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title(if zh {
+            "导入自测数据备份 (ZIP)"
+        } else {
+            "Import self-test data backup (ZIP)"
+        })
+        .add_filter("ZIP", &["zip"])
+        .pick_file(move |path| {
+            let _ = tx.send(path);
+        });
+    let Some(path) = rx.await.ok().flatten().and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let root = data_dir()?;
+    let overwrite = overwrite.unwrap_or(false);
+    tokio::task::spawn_blocking(move || import_backup_zip(&root, &path, overwrite).map(Some))
+        .await
+        .map_err(|e| SelfTestError::with_message("io_failed", e.to_string()))?
 }
 
 #[tauri::command]

@@ -402,6 +402,34 @@ export function selfTestAdbRestart(adbPath?: string): Promise<SelfTestEnv> {
   });
 }
 
+export interface BackupArchiveSummary {
+  path: string;
+  records: number;
+  blobs: number;
+  reviews: number;
+  imported: number;
+  skipped: number;
+  overwritten: number;
+}
+
+export function exportSelfTestBackup(
+  language: Language,
+): Promise<BackupArchiveSummary | null> {
+  return call<BackupArchiveSummary | null>("self_test_backup_export", {
+    locale: language,
+  });
+}
+
+export function importSelfTestBackup(
+  language: Language,
+  overwrite = false,
+): Promise<BackupArchiveSummary | null> {
+  return call<BackupArchiveSummary | null>("self_test_backup_import", {
+    locale: language,
+    overwrite,
+  });
+}
+
 export function selfTestWaitDevice(
   adbPath: string | undefined,
   serial: string,

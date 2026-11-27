@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import {
+  Download,
   ExternalLink,
   Languages,
   FolderOpen,
   Heart,
   SunMoon,
+  Upload,
 } from "lucide-react";
 import {
   Dialog,
@@ -15,12 +17,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { XlsxSettings } from "@/components/self-test/xlsx-settings";
 import { SettingsGroup } from "@/components/settings-group";
 import { UpdateSettings } from "@/components/update-settings";
 import type { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { Spinner } from "@/components/ui/spinner";
-import { selfTestStorage } from "./api/self_test";
+import {
+  exportSelfTestBackup,
+  importSelfTestBackup,
+  selfTestStorage,
+} from "./api/self_test";
 import { openRepository, revealPath, SOURCE_REPOSITORY } from "./api/shell";
 import { desktop } from "./api/transport";
 import { t, type Language, type LanguagePreference } from "./i18n";
@@ -45,6 +52,7 @@ export function SettingsDialog({
   recordTags,
   xlsx,
   onPreferencesChange,
+  onBackupImported,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,12 +66,80 @@ export function SettingsDialog({
   recordTags: RecordTagVisibility;
   xlsx: XlsxPreferences;
   onPreferencesChange: typeof savePreferences;
+  onBackupImported?: () => void;
 }) {
   const [storage, setStorage] = useState("");
   const [loadingStorage, setLoadingStorage] = useState(false);
+  const [backupAction, setBackupAction] = useState<"export" | "import" | null>(
+    null,
+  );
+  const [backupOverwrite, setBackupOverwrite] = useState(false);
+  const [backupStatus, setBackupStatus] = useState("");
+
+  async function handleExportBackup() {
+    setBackupAction("export");
+    setBackupStatus("");
+    try {
+      const res = await exportSelfTestBackup(language);
+      if (res) {
+        setBackupStatus(
+          t("settings.backupExported", {
+            records: res.records,
+            reviews: res.reviews,
+            path: res.path,
+          }),
+        );
+      }
+    } catch (error) {
+      setBackupStatus(
+        t("settings.backupFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      setBackupAction(null);
+    }
+  }
+
+  async function handleImportBackup() {
+    setBackupAction("import");
+    setBackupStatus("");
+    try {
+      const res = await importSelfTestBackup(language, backupOverwrite);
+      if (res) {
+        setBackupStatus(
+          res.overwritten > 0
+            ? t("settings.backupImportedWithOverwrite", {
+                imported: res.imported,
+                overwritten: res.overwritten,
+                skipped: res.skipped,
+              })
+            : t("settings.backupImported", {
+                imported: res.imported,
+                skipped: res.skipped,
+              }),
+        );
+        if (res.imported > 0) {
+          onBackupImported?.();
+        }
+      }
+    } catch (error) {
+      setBackupStatus(
+        t("settings.backupFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      setBackupAction(null);
+    }
+  }
 
   useEffect(() => {
-    if (!open || !desktop()) return;
+    if (!open) {
+      setBackupStatus("");
+      return;
+    }
+    if (!desktop()) return;
     let active = true;
     setLoadingStorage(true);
     selfTestStorage()
@@ -195,6 +271,56 @@ export function SettingsDialog({
                   </Button>
                 </div>
               </div>
+              <div className="settings-row">
+                <span>{t("settings.backup")}</span>
+                <div className="settings-path">
+                  <div className="settings-actions">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        backupAction !== null || collecting || !desktop()
+                      }
+                      onClick={() => void handleExportBackup()}
+                    >
+                      {backupAction === "export" ? (
+                        <Spinner aria-hidden="true" />
+                      ) : (
+                        <Download aria-hidden="true" />
+                      )}
+                      {t("settings.backupExport")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        backupAction !== null || collecting || !desktop()
+                      }
+                      onClick={() => void handleImportBackup()}
+                    >
+                      {backupAction === "import" ? (
+                        <Spinner aria-hidden="true" />
+                      ) : (
+                        <Upload aria-hidden="true" />
+                      )}
+                      {t("settings.backupImport")}
+                    </Button>
+                  </div>
+                  <label className="settings-check">
+                    <Checkbox
+                      checked={backupOverwrite}
+                      disabled={backupAction !== null || !desktop()}
+                      onCheckedChange={(checked) =>
+                        setBackupOverwrite(checked === true)
+                      }
+                    />
+                    <span>{t("settings.backupOverwrite")}</span>
+                  </label>
+                </div>
+              </div>
+              {backupStatus ? (
+                <p className="quiet settings-note">{backupStatus}</p>
+              ) : null}
               <p className="quiet settings-note">{t("settings.shared")}</p>
             </SettingsGroup>
 

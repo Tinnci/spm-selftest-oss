@@ -3,10 +3,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use spm_selftest::self_test::{
-    SelfTestError, SelfTestRecord, XlsxOptions, compute_diff, encode_text, render_csv_ledger,
-    render_markdown_report, review_plan_for, self_test_env, self_test_get,
-    self_test_launcher_layout, self_test_list, self_test_rename, self_test_run, summary_of,
-    write_txt4_bundle, write_xlsx_report, xlsx_file_name,
+    SelfTestError, SelfTestRecord, XlsxOptions, compute_diff, data_dir, encode_text,
+    export_backup_zip, import_backup_zip, render_csv_ledger, render_markdown_report,
+    review_plan_for, self_test_env, self_test_get, self_test_launcher_layout, self_test_list,
+    self_test_rename, self_test_run, summary_of, write_txt4_bundle, write_xlsx_report,
+    xlsx_file_name,
 };
 
 const EXIT_OK: u8 = 0;
@@ -107,6 +108,19 @@ enum Commands {
         serial: String,
         #[arg(long)]
         adb: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    Backup {
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    Import {
+        file: PathBuf,
+        #[arg(long)]
+        overwrite: bool,
         #[arg(long)]
         json: bool,
     },
@@ -523,6 +537,49 @@ fn run() -> ExitCode {
                             layout.source
                         );
                         println!("items={}", layout.items.len());
+                        ExitCode::from(EXIT_OK)
+                    }
+                }
+                Err(error) => fail(error, EXIT_CAPTURE),
+            }
+        }
+        Commands::Backup { out, json } => {
+            let result = data_dir().and_then(|root| export_backup_zip(&root, &out));
+            match result {
+                Ok(summary) => {
+                    if json {
+                        print_json(&summary)
+                    } else {
+                        println!(
+                            "exported={} records={} blobs={} reviews={}",
+                            summary.path, summary.records, summary.blobs, summary.reviews
+                        );
+                        ExitCode::from(EXIT_OK)
+                    }
+                }
+                Err(error) => fail(error, EXIT_CAPTURE),
+            }
+        }
+        Commands::Import {
+            file,
+            overwrite,
+            json,
+        } => {
+            let result = data_dir().and_then(|root| import_backup_zip(&root, &file, overwrite));
+            match result {
+                Ok(summary) => {
+                    if json {
+                        print_json(&summary)
+                    } else {
+                        println!(
+                            "imported={} skipped={} overwritten={} records={} blobs={} reviews={}",
+                            summary.imported,
+                            summary.skipped,
+                            summary.overwritten,
+                            summary.records,
+                            summary.blobs,
+                            summary.reviews
+                        );
                         ExitCode::from(EXIT_OK)
                     }
                 }

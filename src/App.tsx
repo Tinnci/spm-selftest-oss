@@ -86,6 +86,7 @@ export default function App() {
   const [preferences, setPreferences] = useState(readPreferences);
   const [version, setVersion] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recordsRevision, setRecordsRevision] = useState(0);
   const narrow = useNarrow();
   const update = useDesktopUpdate();
   const collapsed = preferences.railCollapsed || narrow;
@@ -134,6 +135,7 @@ export default function App() {
               recordTags={preferences.recordTags}
               xlsx={preferences.xlsx}
               onPreferencesChange={updatePreferences}
+              onBackupImported={() => setRecordsRevision((n) => n + 1)}
             />
 
             <header className="appbar" data-tauri-drag-region>
@@ -300,6 +302,7 @@ export default function App() {
                   onActivity={setBusy}
                   recordTags={preferences.recordTags}
                   xlsx={preferences.xlsx}
+                  refreshKey={recordsRevision}
                 />
               )}
             </div>

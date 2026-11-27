@@ -23,6 +23,8 @@
     "allow-self-test-diff",
     "allow-self-test-export-file",
     "allow-self-test-storage",
+    "allow-self-test-backup-export",
+    "allow-self-test-backup-import",
     "allow-self-test-rename",
     "allow-self-test-recheck",
     "allow-self-test-review-plan",

@@ -51,6 +51,8 @@ fn main() {
             "self_test_diff",
             "self_test_export_file",
             "self_test_storage",
+            "self_test_backup_export",
+            "self_test_backup_import",
             "self_test_rename",
             "self_test_recheck",
             "self_test_review_plan",
