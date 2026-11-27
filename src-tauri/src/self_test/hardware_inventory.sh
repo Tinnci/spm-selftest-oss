@@ -14,12 +14,27 @@ inventory() {
             esac
             printf '@exit:%s\n' "$?"
         ) 2>&1 | awk -v group="$group" -v root="$root" '
-            /^@exit:/ { code=substr($0,7); next }
-            /Permission denied|Operation not permitted/ { denied=1; next }
-            index($0, root "/") == 1 {
-                if (group == "device_tree" && $0 !~ /\/(lcds?($|\/)|[^/]*(touch|gcore|gc7272|focal|novatek|panel|ddr|emmc|fingerprint|silead|goodix|sensorhub|battery|charger)[^/]*$)/) next
-                if (++size <= 20000) print "I\t" group "\t" $0
+            function candidate(path, n) {
+                if (index(path, root "/") != 1) return
+                if (group == "modules" && path !~ /\.ko[^\/]*$/) return
+                if (group == "device_tree") {
+                    n=split(path, segments, "/")
+                    if (path !~ /\/lcds?(\/|$)/ && segments[n] !~ /(touch|gcore|gc7272|focal|novatek|panel|ddr|emmc|fingerprint|silead|goodix|sensorhub|battery|charger)/) return
+                }
+                if (!listed[path]++ && ++size <= 20000) print "I\t" group "\t" path
             }
+            /^@exit:/ { code=substr($0,7); next }
+            /Permission denied|Operation not permitted/ {
+                denied=1
+                start=index($0, root "/")
+                if (start) {
+                    path=substr($0,start)
+                    sub(/\047?: (Permission denied|Operation not permitted).*$/, "", path)
+                    candidate(path)
+                }
+                next
+            }
+            { candidate($0) }
             END {
                 if (size > 20000) status="truncated"
                 else if (denied && size) status="partial"

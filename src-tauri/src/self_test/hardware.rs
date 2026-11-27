@@ -223,11 +223,12 @@ async fn mmi_screen(adb: &Path, serial: &str, package: &str) -> Option<MmiScreen
 
 async fn swipe(adb: &Path, serial: &str, bounds: &ScrollBounds, down: bool) -> bool {
     let (from, to) = if down {
-        (bounds.bottom, bounds.top)
+        (bounds.bottom, bounds.top + (bounds.bottom - bounds.top) / 3)
     } else {
         (bounds.top, bounds.bottom)
     };
     let x = bounds.x.to_string();
+    let duration = if down { "650" } else { "400" };
     shell(
         adb,
         serial,
@@ -238,7 +239,7 @@ async fn swipe(adb: &Path, serial: &str, bounds: &ScrollBounds, down: bool) -> b
             &from.to_string(),
             &x,
             &to.to_string(),
-            "400",
+            duration,
         ],
     )
     .await
@@ -408,6 +409,41 @@ mod tests {
         assert_eq!(
             snapshot.inventory_sources["firmware"]["/vendor/firmware"],
             "partial"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inventory_keeps_visible_names_when_file_metadata_is_denied() {
+        let fake_find = r#"
+            find() {
+                case "$1" in
+                    /vendor/firmware/)
+                        printf "find: '%s': Permission denied\n" /vendor/firmware/tp.bin >&2
+                        return 1 ;;
+                    /sys/firmware/devicetree/base/)
+                        printf '%s\n' /sys/firmware/devicetree/base/lcds/lcd_test
+                        return 0 ;;
+                    *) return 1 ;;
+                esac
+            }
+        "#;
+        let output = std::process::Command::new("sh")
+            .args(["-c", &format!("{fake_find}\n{INVENTORY_SCRIPT}")])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let mut snapshot = HardwareSnapshot::default();
+        parse_inventory(std::str::from_utf8(&output.stdout).unwrap(), &mut snapshot);
+        assert_eq!(snapshot.inventory["firmware"], ["/vendor/firmware/tp.bin"]);
+        assert_eq!(
+            snapshot.inventory_sources["firmware"]["/vendor/firmware"],
+            "partial"
+        );
+        assert_eq!(
+            snapshot.inventory["device_tree"],
+            ["/sys/firmware/devicetree/base/lcds/lcd_test"]
         );
     }
 

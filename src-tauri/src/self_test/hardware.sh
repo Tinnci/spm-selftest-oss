@@ -65,6 +65,13 @@ touch_version() {
             parent=${parent%/*}
         done
     done
+    if touch_input | grep -Eq '^gcore \('; then
+        set -- /sys/bus/spi/drivers/gcore/spi*.*
+        if [ "$#" -eq 1 ] && [ -d "$1" ]; then
+            probe tp_controller_version "$1/fw_ver" head -n 1 "$1/fw_ver"
+            return
+        fi
+    fi
     printf 'A\ttp_controller_version\tunavailable\t/sys/class/input\t\n'
 }
 
