@@ -117,6 +117,7 @@ Linux job 还检查 Rust 格式。Node 和 Rust 版本分别由 `.nvmrc` 和 `ru
 
 在 main 分支手动运行 [Cut Release](.github/workflows/cut-release.yml) 会同步版本文件、
 创建标签并启动桌面发布。也可以直接推送与应用版本一致的 `v*` 标签。
+需要用 main 上的新工作流重试已有标签时，手动运行 Desktop Release 并填写 `tag`。
 
 桌面发布构建 Windows x64 和 ARM64 的 NSIS 安装包，以及 Linux x86_64 AppImage。
 每个 Windows 架构同时提供便携 EXE、包含 GUI 和 CLI 的 ZIP 及 ZIP 的 SHA-256。
