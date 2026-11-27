@@ -2,7 +2,7 @@
 
 ## 系统要求
 
-- Windows 10 1809 及以上或 Windows 11，x64。
+- x64 支持 Windows 10 1809 及以上和 Windows 11。ARM64 支持 Windows 11。
 - Microsoft Edge WebView2 Runtime（Windows 11 与较新的 Windows 10 已预装）。
   未安装时从 https://developer.microsoft.com/microsoft-edge/webview2/ 安装 Evergreen Runtime。
 - 采集设备需要 adb：安装 Android platform-tools 并加入 PATH，或在应用内填写 adb 路径。
@@ -10,9 +10,9 @@
 
 ## 下载与启动
 
-在 [GitHub Releases](https://github.com/Tinnci/spm-selftest-oss/releases/latest) 下载
-`SPM-SelfTest-<version>-windows-x86_64.exe`，双击即可启动便携版。
-需要 CLI 时下载便携 ZIP。需要安装版时下载 `*-x64-setup.exe`，安装后可从开始菜单打开。
+在 [GitHub Releases](https://github.com/Tinnci/spm-selftest-oss/releases/latest) 下载与系统架构匹配的文件。
+便携文件名包含 `windows-x86_64` 或 `windows-aarch64`。双击便携 EXE 可启动应用，
+需要 CLI 时下载便携 ZIP。NSIS 安装包以 `-setup.exe` 结尾，安装后可从开始菜单打开。
 
 首次启动会在
 `%LOCALAPPDATA%\SPM-SelfTest` 建立记录目录，并把 Maon 旧目录中的自测记录导入一次。

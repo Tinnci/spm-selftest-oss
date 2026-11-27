@@ -110,15 +110,17 @@ Vitest、rustfmt、clippy（`-D warnings`）和 cargo test，与 CI 门禁一致
 
 [CI](.github/workflows/ci.yml) 在推送 main、打开 PR 或手动触发时运行前端门禁，
 并把同一份前端产物提供给 Ubuntu 和 Windows。两个平台各自在同一个 Rust job 中
-复用 Cargo 构建目录，完成 Clippy 和桌面程序、CLI 的调试构建。Linux 还运行
-Rust 测试与格式检查。Node 和 Rust 版本分别由 `.nvmrc` 和 `rust-toolchain.toml` 固定。
+复用 Cargo 构建目录，完成 Clippy、Rust 测试和桌面程序、CLI 的调试构建。
+Linux job 还检查 Rust 格式。Node 和 Rust 版本分别由 `.nvmrc` 和 `rust-toolchain.toml` 固定。
 
 ## 发布与桌面更新
 
-GitHub Actions 在推送与应用版本一致的 `v*` 标签时构建 Windows x64 NSIS 安装包和
-Linux x86_64 AppImage，签名后上传至草稿 Release。Windows 还提供可直接运行的
-单文件便携 EXE、包含 GUI 和 CLI 的便携 ZIP 与 ZIP 的 SHA-256。发布 workflow 会校验
-两个平台的更新清单，并写入公开下载地址。
+在 main 分支手动运行 [Cut Release](.github/workflows/cut-release.yml) 会同步版本文件、
+创建标签并启动桌面发布。也可以直接推送与应用版本一致的 `v*` 标签。
+
+桌面发布构建 Windows x64 和 ARM64 的 NSIS 安装包，以及 Linux x86_64 AppImage。
+每个 Windows 架构同时提供便携 EXE、包含 GUI 和 CLI 的 ZIP 及 ZIP 的 SHA-256。
+集齐三个架构的安装包和签名后，工作流生成带公开下载地址的更新清单并发布草稿。
 
 安装发布包后，应用会在启动时检查更新，也可以在「设置 → 关于」手动检查。发现新版本后，
 需要确认安装并重启。应用优先直连公开的 GitHub Release，检查或下载失败时从
