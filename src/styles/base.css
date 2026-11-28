@@ -327,13 +327,12 @@ h1 {
   max-width: min(320px, var(--available-width));
   max-height: var(--available-height);
   overflow: auto;
-  padding: 5px;
-  border-radius: 10px;
+  padding: 4px;
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
   background: var(--popover);
   color: var(--popover-foreground);
-  box-shadow:
-    0 5px 24px #17201b24,
-    0 0 0 1px #17201b1a;
+  box-shadow: var(--popup-shadow);
   outline: none;
   font-size: 13px;
 }
@@ -342,20 +341,24 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 6px 9px 7px;
+  padding: 5px 8px 6px;
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted-foreground);
 }
 .context-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 32px;
-  padding: 6px 9px;
-  border-radius: 5px;
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: var(--popup-item-radius);
   outline: none;
   cursor: default;
   user-select: none;
+  transition:
+    background-color var(--motion-feedback) ease-out,
+    color var(--motion-feedback) ease-out;
 }
 .context-menu-item[data-highlighted] {
   background: var(--accent);
@@ -370,7 +373,7 @@ h1 {
 }
 .context-menu-separator {
   height: 1px;
-  margin: 4px 3px;
+  margin: 4px -4px;
   background: var(--border);
 }
 .context-menu-status {

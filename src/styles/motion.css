@@ -32,7 +32,8 @@
 
 :is(
   [data-slot="dropdown-menu-content"],
-  [data-slot="dropdown-menu-sub-content"]
+  [data-slot="dropdown-menu-sub-content"],
+  .context-menu-popup
 ) {
   transform: scale(1);
   transition:
@@ -42,7 +43,8 @@
 
 :is(
   [data-slot="dropdown-menu-content"],
-  [data-slot="dropdown-menu-sub-content"]
+  [data-slot="dropdown-menu-sub-content"],
+  .context-menu-popup
 ):is([data-starting-style], [data-ending-style]) {
   opacity: 0;
   transform: scale(0.96);
