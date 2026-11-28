@@ -1,9 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Folder, LayoutGrid, RefreshCw, Sparkles } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Folder,
+  LayoutGrid,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { HighlightText } from "@/components/ui/highlight-text";
+import { SearchInput } from "@/components/ui/search-input";
 import type { LauncherItem, LauncherLayout } from "../../api/self_test";
 import { useCopyWithToast } from "../../hooks/useCopyWithToast";
 
@@ -49,6 +58,19 @@ export function LauncherLayoutPanel({
   const [filter, setFilter] = useState("");
   const [activeScreen, setActiveScreen] = useState<number | "all">(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(copyTimerRef.current), []);
+
+  const handleCopyValue = async (key: string, value: string) => {
+    const ok = await copyWithToast(value);
+    if (!ok) return;
+    onCopied?.();
+    setCopiedKey(key);
+    clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedKey(null), 1200);
+  };
 
   const screens = useMemo(() => {
     if (!layout) return [];
@@ -197,7 +219,12 @@ export function LauncherLayoutPanel({
               : t("selftest.launcher.noLayout")}
           </Badge>
           {geminiPlacement ? (
-            <Badge variant={geminiPlacement.ok ? "outline" : "secondary"}>
+            <Badge
+              variant="outline"
+              className={
+                geminiPlacement.ok ? "selftest-tone-pass" : "selftest-tone-warn"
+              }
+            >
               <Sparkles size={11} aria-hidden="true" />
               {geminiPlacement.ok && geminiPlacement.screen
                 ? t("selftest.launcher.geminiBadgeOk", {
@@ -240,15 +267,15 @@ export function LauncherLayoutPanel({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => {
-                void copyWithToast(JSON.stringify(layout, null, 2)).then(
-                  (ok) => {
-                    if (ok) onCopied?.();
-                  },
-                );
-              }}
+              onClick={() =>
+                void handleCopyValue("json", JSON.stringify(layout, null, 2))
+              }
             >
-              <Copy size={13} aria-hidden="true" />
+              {copiedKey === "json" ? (
+                <Check size={13} aria-hidden="true" />
+              ) : (
+                <Copy size={13} aria-hidden="true" />
+              )}
               {t("selftest.launcher.copyJson")}
             </Button>
           ) : null}
@@ -256,7 +283,11 @@ export function LauncherLayoutPanel({
       </div>
 
       {!layout ? (
-        <p className="selftest-empty-note">{t("selftest.launcher.empty")}</p>
+        <EmptyState
+          icon={LayoutGrid}
+          title={t("selftest.launcher.noLayout")}
+          description={t("selftest.launcher.empty")}
+        />
       ) : (
         <>
           {layout.notes.length > 0 ? (
@@ -278,6 +309,8 @@ export function LauncherLayoutPanel({
                       <button
                         key={`switch-${screen}`}
                         type="button"
+                        role="tab"
+                        aria-selected={isCurrent}
                         className={`selftest-launcher-pill${isCurrent ? " is-active" : ""}`}
                         onClick={() => setActiveScreen(screen)}
                       >
@@ -293,6 +326,8 @@ export function LauncherLayoutPanel({
                   })}
                   <button
                     type="button"
+                    role="tab"
+                    aria-selected={activeScreen === "all"}
                     className={`selftest-launcher-pill${activeScreen === "all" ? " is-active" : ""}`}
                     onClick={() => setActiveScreen("all")}
                   >
@@ -466,15 +501,19 @@ export function LauncherLayoutPanel({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          void copyWithToast(selectedItem.component).then(
-                            (ok) => {
-                              if (ok) onCopied?.();
-                            },
-                          );
-                        }}
+                        aria-label={t("selftest.ctxCopyValue")}
+                        onClick={() =>
+                          void handleCopyValue(
+                            "component",
+                            selectedItem.component,
+                          )
+                        }
                       >
-                        <Copy size={12} aria-hidden="true" />
+                        {copiedKey === "component" ? (
+                          <Check size={12} aria-hidden="true" />
+                        ) : (
+                          <Copy size={12} aria-hidden="true" />
+                        )}
                       </Button>
                     ) : null}
                   </div>
@@ -491,7 +530,19 @@ export function LauncherLayoutPanel({
                       <>
                         <dt>{t("selftest.launcher.component")}</dt>
                         <dd className="selftest-launcher-mono">
-                          {selectedItem.component || selectedItem.package}
+                          <button
+                            type="button"
+                            className="selftest-kv-value"
+                            title={t("selftest.ctxCopyValue")}
+                            onClick={() =>
+                              void handleCopyValue(
+                                "component",
+                                selectedItem.component || selectedItem.package,
+                              )
+                            }
+                          >
+                            {selectedItem.component || selectedItem.package}
+                          </button>
                         </dd>
                       </>
                     ) : null}
@@ -556,11 +607,11 @@ export function LauncherLayoutPanel({
               )}
 
               <div className="selftest-launcher-table-wrap">
-                <Input
+                <SearchInput
                   value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
+                  onChange={setFilter}
                   placeholder={t("selftest.launcher.filterPlaceholder")}
-                  aria-label={t("selftest.launcher.filterPlaceholder")}
+                  ariaLabel={t("selftest.launcher.filterPlaceholder")}
                 />
                 <ul className="selftest-launcher-list">
                   {filteredItems.map((item) => {
@@ -579,9 +630,17 @@ export function LauncherLayoutPanel({
                                 ? `Dock #${item.cell_x + 1}`
                                 : `Folder #${item.folder_id ?? "-"}`}
                           </span>
-                          <strong>{itemLabel(item)}</strong>
+                          <strong>
+                            <HighlightText
+                              text={itemLabel(item)}
+                              query={filter}
+                            />
+                          </strong>
                           <span className="selftest-launcher-item-comp">
-                            {item.package || item.component}
+                            <HighlightText
+                              text={item.package || item.component}
+                              query={filter}
+                            />
                           </span>
                         </button>
                       </li>

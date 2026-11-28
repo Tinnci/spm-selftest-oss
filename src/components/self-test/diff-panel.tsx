@@ -7,7 +7,7 @@ import type {
 } from "@/api/self_test";
 import { Button } from "@/components/ui/button";
 import { HighlightText } from "@/components/ui/highlight-text";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import { useCopyWithToast } from "@/hooks/useCopyWithToast";
 
@@ -207,11 +207,11 @@ export function DiffPanel({
           </div>
 
           <div className="selftest-diff-toolbar">
-            <Input
+            <SearchInput
               value={diffFilter}
               placeholder={t("selftest.diffFilterPlaceholder")}
-              aria-label={t("selftest.diffFilterPlaceholder")}
-              onChange={(e) => setDiffFilter(e.target.value)}
+              ariaLabel={t("selftest.diffFilterPlaceholder")}
+              onChange={setDiffFilter}
             />
             {onToggleChangedOnly ? (
               <Button

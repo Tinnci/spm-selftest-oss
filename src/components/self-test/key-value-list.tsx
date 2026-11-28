@@ -68,14 +68,19 @@ export function KeyValueList({
               {copyable ? (
                 <button
                   type="button"
-                  className="selftest-kv-value"
+                  className={`selftest-kv-value${item.value === "(not set)" ? " is-unset" : ""}`}
                   title={item.title ?? t("selftest.ctxCopyValue")}
                   onClick={() => void handleCopy(item.key, item.value)}
                 >
                   {item.value}
                 </button>
               ) : (
-                <span title={item.title}>{item.value}</span>
+                <span
+                  className={item.value === "(not set)" ? "quiet" : undefined}
+                  title={item.title}
+                >
+                  {item.value}
+                </span>
               )}
               {item.badge}
               {copyable ? (

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { DrmSection } from "@/api/self_test";
 import { Badge } from "@/components/ui/badge";
+import { CopyPre } from "@/components/ui/copy-pre";
 import { useCopyWithToast } from "@/hooks/useCopyWithToast";
 
 export function DrmPanel({
@@ -19,7 +20,7 @@ export function DrmPanel({
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
-  const handleCopy = async (key: string, text: string) => {
+  const handleCopyFact = async (key: string, text: string) => {
     const ok = await copyWithToast(text);
     if (!ok) return;
     setCopiedKey(key);
@@ -49,7 +50,7 @@ export function DrmPanel({
                 type="button"
                 className="selftest-drm-fact-btn"
                 title={t("selftest.ctxCopyValue")}
-                onClick={() => void handleCopy(key, fact)}
+                onClick={() => void handleCopyFact(key, fact)}
               >
                 <Badge variant="secondary">
                   {fact}
@@ -60,32 +61,12 @@ export function DrmPanel({
           })}
         </div>
       ) : null}
-      {sections.map((sec) => {
-        const text = sec.lines.join("\n");
-        const secKey = `sec-${sec.name}`;
-        const isCopied = copiedKey === secKey;
-        return (
-          <section key={sec.name} className="selftest-drm-section">
-            <h4>[{sec.name}]</h4>
-            <div className="selftest-pre-wrap">
-              <pre>{text}</pre>
-              <button
-                type="button"
-                className={`selftest-pre-copy${isCopied ? " is-copied" : ""}`}
-                aria-label={t("selftest.ctxCopyValue")}
-                title={t("selftest.ctxCopyValue")}
-                onClick={() => void handleCopy(secKey, text)}
-              >
-                {isCopied ? (
-                  <Check size={12} aria-hidden="true" />
-                ) : (
-                  <Copy size={12} aria-hidden="true" />
-                )}
-              </button>
-            </div>
-          </section>
-        );
-      })}
+      {sections.map((sec) => (
+        <section key={sec.name} className="selftest-drm-section">
+          <h4>[{sec.name}]</h4>
+          <CopyPre text={sec.lines.join("\n")} />
+        </section>
+      ))}
     </div>
   );
 }

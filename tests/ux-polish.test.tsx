@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRef } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 import { HighlightText } from "@/components/ui/highlight-text";
@@ -8,7 +8,10 @@ import { FilterableMonoList } from "@/components/self-test/filterable-mono-list"
 import { DiffPanel } from "@/components/self-test/diff-panel";
 import { DrmPanel } from "@/components/self-test/drm-panel";
 import { KeyValueList } from "@/components/self-test/key-value-list";
+import { LauncherLayoutPanel } from "@/components/self-test/launcher-panel";
 import { RecordSidebar } from "@/components/self-test/record-sidebar";
+import { CopyPre } from "@/components/ui/copy-pre";
+import { SearchInput } from "@/components/ui/search-input";
 import { copyText } from "@/api/shell";
 import { DEFAULT_RECORD_TAGS } from "@/preferences";
 import { formatRelativeTime, patchCountdown } from "@/selftest/date";
@@ -23,6 +26,7 @@ vi.mock("@/api/shell", () => ({
 }));
 
 describe("UX polish helpers and components", () => {
+  afterEach(() => cleanup());
   it("computes patchCountdown for valid, soon, and expired dates", () => {
     const valid = patchCountdown("2026-11-01", "2026-11-10", 90);
     expect(valid).toEqual({ remainingDays: 81, expired: false, soon: false });
@@ -284,5 +288,39 @@ describe("UX polish helpers and components", () => {
     });
     fireEvent.click(preCopyButtons[preCopyButtons.length - 1]);
     expect(copyText).toHaveBeenCalledWith("version=18.0\nlevel=L1");
+  });
+
+  it("renders SearchInput, CopyPre, KeyValueList unset state, and LauncherLayoutPanel consistently", () => {
+    const onSearchChange = vi.fn();
+    const { container } = render(
+      <ToastProvider>
+        <SearchInput
+          value="abc"
+          onChange={onSearchChange}
+          placeholder="Search"
+        />
+        <CopyPre text="ro.build.id=XYZ" />
+        <KeyValueList
+          items={[{ key: "baseos", label: "BaseOS", value: "(not set)" }]}
+        />
+        <LauncherLayoutPanel
+          layout={null}
+          serial=""
+          inspecting={false}
+          onInspectLive={vi.fn()}
+        />
+      </ToastProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Clear search|清空搜索/i }),
+    );
+    expect(onSearchChange).toHaveBeenCalledWith("");
+
+    expect(
+      container.querySelector(".selftest-kv-value.is-unset")?.textContent,
+    ).toBe("(not set)");
+
+    expect(container.querySelector(".selftest-empty")).toBeTruthy();
   });
 });

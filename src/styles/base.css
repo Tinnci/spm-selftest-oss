@@ -767,12 +767,12 @@ h1 {
   }
 }
 .cal-model-select {
-  height: var(--control-sm, 28px);
+  height: 32px;
   max-width: 180px;
   background: var(--background);
   color: inherit;
   border: 1px solid var(--input, var(--line));
-  border-radius: min(var(--radius-md, 8px), 10px);
+  border-radius: 8px;
   padding: 0 10px;
   font: inherit;
   font-size: 13px;
@@ -783,8 +783,8 @@ h1 {
 }
 .cal-model-select:focus-visible {
   border-color: var(--ring, var(--accent));
-  box-shadow: 0 0 0 2px
-    color-mix(in srgb, var(--ring, var(--accent)) 25%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--ring, var(--accent)) 50%, transparent);
 }
 .legacy-note [data-slot="button"] {
   margin-left: auto;

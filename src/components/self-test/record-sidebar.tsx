@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/empty-state";
 import { HighlightText } from "@/components/ui/highlight-text";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
@@ -208,29 +208,13 @@ export function RecordSidebar({
           </div>
         </div>
         <div className="selftest-record-search">
-          <div className="selftest-search-input-wrap">
-            <Input
-              ref={searchRef}
-              value={recordQuery}
-              placeholder={t("selftest.searchRecordsShort")}
-              aria-label={t("selftest.searchRecords")}
-              onChange={(e) => setRecordQuery(e.target.value)}
-            />
-            {recordQuery ? (
-              <button
-                type="button"
-                className="selftest-search-clear"
-                aria-label={t("selftest.clearSearch")}
-                title={t("selftest.clearSearch")}
-                onClick={() => {
-                  setRecordQuery("");
-                  searchRef.current?.focus();
-                }}
-              >
-                <X size={13} aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
+          <SearchInput
+            ref={searchRef}
+            value={recordQuery}
+            placeholder={t("selftest.searchRecordsShort")}
+            ariaLabel={t("selftest.searchRecords")}
+            onChange={setRecordQuery}
+          />
           <Button
             className="selftest-filter-toggle"
             variant={hasFilters || filtersOpen ? "secondary" : "outline"}

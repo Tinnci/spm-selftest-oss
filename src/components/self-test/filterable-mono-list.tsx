@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { HighlightText } from "@/components/ui/highlight-text";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { useCopyWithToast } from "@/hooks/useCopyWithToast";
 
 export function FilterableMonoList({
@@ -45,10 +45,11 @@ export function FilterableMonoList({
       aria-labelledby={tabId}
       tabIndex={0}
     >
-      <Input
+      <SearchInput
         value={filter}
         placeholder={placeholder}
-        onChange={(e) => onFilterChange(e.target.value)}
+        ariaLabel={placeholder}
+        onChange={onFilterChange}
       />
       <ul className="selftest-mono-list">
         {items.map((entry) => {
