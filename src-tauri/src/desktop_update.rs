@@ -1,6 +1,10 @@
 use std::{
     collections::HashSet,
+    fs::{self, File},
+    io::Write,
     net::{IpAddr, SocketAddr},
+    path::{Path, PathBuf},
+    process::Command,
     sync::LazyLock,
     time::Duration,
 };
@@ -9,7 +13,7 @@ use futures_util::{StreamExt, stream};
 use regex::Regex;
 use reqwest::{Client, ClientBuilder, Response, redirect::Policy};
 use serde::Serialize;
-use tauri::{Manager, Resource, ResourceId, Url, Webview};
+use tauri::{Emitter, Manager, Resource, ResourceId, Url, Webview};
 use tauri_plugin_updater::{Update, Updater, UpdaterExt};
 use tokio::{net::lookup_host, sync::Mutex, time::timeout};
 
@@ -26,6 +30,8 @@ const MAX_PACKAGE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_NODES: usize = 10;
 const PROBE_CONCURRENCY: usize = 5;
 const DOWNLOAD_ATTEMPTS: usize = 4;
+const PROGRESS_STEP_BYTES: u64 = 128 * 1024;
+const PROGRESS_EVENT: &str = "desktop-update-progress";
 const DEFAULT_MIRRORS: [&str; 2] = ["ghproxy.net", "gh-proxy.com"];
 
 static CHUNK: LazyLock<Regex> =
@@ -37,6 +43,7 @@ static NODE: LazyLock<Regex> = LazyLock::new(|| {
 struct PendingUpdate {
     update: Update,
     mirror: Option<Mirror>,
+    portable: bool,
     install_lock: Mutex<()>,
 }
 
@@ -47,6 +54,23 @@ impl Resource for PendingUpdate {}
 pub struct AvailableUpdate {
     id: ResourceId,
     version: String,
+    portable: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallOutcome {
+    mode: String,
+    installer_path: Option<String>,
+    launched: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateProgressEvent {
+    stage: &'static str,
+    downloaded: u64,
+    total: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -126,21 +150,54 @@ fn mirror_names(source: &str) -> Vec<String> {
     )
 }
 
-async fn bounded_body(mut response: Response, limit: usize) -> Result<Vec<u8>, String> {
+fn emit_progress(webview: &Webview, stage: &'static str, downloaded: u64, total: Option<u64>) {
+    let _ = webview.emit(
+        PROGRESS_EVENT,
+        UpdateProgressEvent {
+            stage,
+            downloaded,
+            total,
+        },
+    );
+}
+
+async fn bounded_body_with_progress(
+    mut response: Response,
+    limit: usize,
+    mut on_progress: impl FnMut(u64, Option<u64>),
+) -> Result<Vec<u8>, String> {
     if response
         .content_length()
         .is_some_and(|length| length > limit as u64)
     {
         return Err("update response is too large".to_owned());
     }
+    let total = response
+        .content_length()
+        .filter(|length| *length <= limit as u64);
     let mut bytes = Vec::new();
+    let mut last_reported: u64 = 0;
+    on_progress(0, total);
     while let Some(chunk) = response.chunk().await.map_err(|error| error.to_string())? {
         if chunk.len() > limit - bytes.len() {
             return Err("update response is too large".to_owned());
         }
         bytes.extend_from_slice(&chunk);
+        let downloaded = bytes.len() as u64;
+        if downloaded.saturating_sub(last_reported) >= PROGRESS_STEP_BYTES {
+            last_reported = downloaded;
+            on_progress(downloaded, total);
+        }
+    }
+    let downloaded = bytes.len() as u64;
+    if downloaded != last_reported {
+        on_progress(downloaded, total);
     }
     Ok(bytes)
+}
+
+async fn bounded_body(response: Response, limit: usize) -> Result<Vec<u8>, String> {
+    bounded_body_with_progress(response, limit, |_, _| {}).await
 }
 
 async fn directory_file(client: &Client, url: String) -> Option<String> {
@@ -240,6 +297,109 @@ fn validate_update(update: Option<Update>) -> Result<Option<Update>, String> {
     Ok(update)
 }
 
+fn validate_version_segment(version: &str) -> Result<&str, String> {
+    let clean = version.trim();
+    if clean.is_empty()
+        || clean.contains("..")
+        || clean.contains('/')
+        || clean.contains('\\')
+        || !clean
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_'))
+    {
+        return Err("invalid update version".to_owned());
+    }
+    Ok(clean)
+}
+
+fn is_portable_from_exe(exe_path: &Path) -> bool {
+    if cfg!(windows) {
+        exe_path
+            .parent()
+            .is_some_and(|dir| !dir.join("uninstall.exe").is_file())
+    } else {
+        false
+    }
+}
+
+fn staged_installer_path(root: &Path, version: &str) -> Result<PathBuf, String> {
+    let clean = validate_version_segment(version)?;
+    Ok(root.join(format!("v{clean}")).join("setup.exe"))
+}
+
+fn stage_installer_bytes(root: &Path, version: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    let dest = staged_installer_path(root, version)?;
+    let parent = dest
+        .parent()
+        .ok_or_else(|| "missing installer directory".to_owned())?;
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let tmp = parent.join(format!(".setup.exe.tmp-{}", std::process::id()));
+    {
+        let mut file = File::create(&tmp).map_err(|error| error.to_string())?;
+        if let Err(error) = file.write_all(bytes) {
+            let _ = fs::remove_file(&tmp);
+            return Err(error.to_string());
+        }
+        if let Err(error) = file.sync_all() {
+            let _ = fs::remove_file(&tmp);
+            return Err(error.to_string());
+        }
+    }
+    #[cfg(windows)]
+    if dest.exists() {
+        let _ = fs::remove_file(&dest);
+    }
+    fs::rename(&tmp, &dest).map_err(|error| {
+        let _ = fs::remove_file(&tmp);
+        error.to_string()
+    })?;
+    Ok(dest)
+}
+
+fn parse_version_tuple(raw: &str) -> Option<(u64, u64, u64)> {
+    let core = raw.split('-').next()?;
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((major, minor, patch))
+}
+
+fn cleanup_old_staged_updates(root: &Path, current_version: &str) {
+    let Some(current) = parse_version_tuple(current_version) else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let Some(ver) = name.strip_prefix('v') else {
+            continue;
+        };
+        if let Some(parsed) = parse_version_tuple(ver)
+            && parsed <= current
+        {
+            let _ = fs::remove_dir_all(path);
+        }
+    }
+}
+
+fn updates_root_dir() -> Result<PathBuf, String> {
+    spm_selftest::self_test::data_dir()
+        .map(|dir| dir.join("updates"))
+        .map_err(|error| error.message.unwrap_or(error.code))
+}
+
 async fn probe_mirror(updater: &Updater, host: String) -> Option<(Mirror, Option<Update>)> {
     let mirror = resolve_mirror(host).await?;
     let client = mirror
@@ -260,14 +420,24 @@ async fn probe_mirror(updater: &Updater, host: String) -> Option<(Mirror, Option
     Some((mirror, update))
 }
 
-fn store_update(webview: &Webview, update: Update, mirror: Option<Mirror>) -> AvailableUpdate {
+fn store_update(
+    webview: &Webview,
+    update: Update,
+    mirror: Option<Mirror>,
+    portable: bool,
+) -> AvailableUpdate {
     let version = update.version.clone();
     let id = webview.resources_table().add(PendingUpdate {
         update,
         mirror,
+        portable,
         install_lock: Mutex::new(()),
     });
-    AvailableUpdate { id, version }
+    AvailableUpdate {
+        id,
+        version,
+        portable,
+    }
 }
 
 #[tauri::command]
@@ -275,6 +445,12 @@ pub async fn check_desktop_update(webview: Webview) -> Result<Option<AvailableUp
     if !webview.config().plugins.0.contains_key("updater") {
         return Ok(None);
     }
+    if let Ok(root) = updates_root_dir() {
+        cleanup_old_staged_updates(&root, env!("CARGO_PKG_VERSION"));
+    }
+    let portable = std::env::current_exe()
+        .ok()
+        .is_some_and(|path| is_portable_from_exe(&path));
     let updater = webview
         .updater_builder()
         .configure_client(http_client)
@@ -283,7 +459,7 @@ pub async fn check_desktop_update(webview: Webview) -> Result<Option<AvailableUp
     if let Ok(Ok(update)) = timeout(CHECK_TIMEOUT, updater.check()).await
         && let Ok(update) = validate_update(update)
     {
-        return Ok(update.map(|update| store_update(&webview, update, None)));
+        return Ok(update.map(|update| store_update(&webview, update, None, portable)));
     }
 
     let candidates = mirror_candidates(None).await;
@@ -294,7 +470,7 @@ pub async fn check_desktop_update(webview: Webview) -> Result<Option<AvailableUp
     while let Some(result) = probes.next().await {
         if let Some((mirror, update)) = result {
             if let Some(update) = update {
-                return Ok(Some(store_update(&webview, update, Some(mirror))));
+                return Ok(Some(store_update(&webview, update, Some(mirror), portable)));
             }
             reachable = true;
         }
@@ -306,7 +482,11 @@ pub async fn check_desktop_update(webview: Webview) -> Result<Option<AvailableUp
     }
 }
 
-async fn fetch_from_mirror(update: &Update, mirror: &Mirror) -> Result<Vec<u8>, String> {
+async fn fetch_from_mirror(
+    update: &Update,
+    mirror: &Mirror,
+    webview: &Webview,
+) -> Result<Vec<u8>, String> {
     let client = mirror
         .configure(Client::builder())
         .timeout(DOWNLOAD_TIMEOUT)
@@ -318,19 +498,44 @@ async fn fetch_from_mirror(update: &Update, mirror: &Mirror) -> Result<Vec<u8>, 
         .await
         .and_then(Response::error_for_status)
         .map_err(|error| error.to_string())?;
-    let bytes = bounded_body(response, MAX_PACKAGE_BYTES).await?;
+    let bytes = bounded_body_with_progress(response, MAX_PACKAGE_BYTES, |downloaded, total| {
+        emit_progress(webview, "downloading", downloaded, total);
+    })
+    .await?;
+    emit_progress(webview, "verifying", bytes.len() as u64, None);
     update.verify(&bytes).map_err(|error| error.to_string())?;
     Ok(bytes)
 }
 
-async fn download_update(pending: &PendingUpdate) -> Result<Vec<u8>, String> {
+async fn download_update(pending: &PendingUpdate, webview: &Webview) -> Result<Vec<u8>, String> {
     let update = &pending.update;
     if let Some(mirror) = &pending.mirror
-        && let Ok(bytes) = fetch_from_mirror(update, mirror).await
+        && let Ok(bytes) = fetch_from_mirror(update, mirror, webview).await
     {
         return Ok(bytes);
     }
-    if let Ok(Ok(bytes)) = timeout(DOWNLOAD_TIMEOUT, update.download(|_, _| {}, || {})).await {
+
+    let mut downloaded_total: u64 = 0;
+    let mut last_reported: u64 = 0;
+    if let Ok(Ok(bytes)) = timeout(
+        DOWNLOAD_TIMEOUT,
+        update.download(
+            |chunk_len, total| {
+                downloaded_total = downloaded_total.saturating_add(chunk_len as u64);
+                if downloaded_total.saturating_sub(last_reported) >= PROGRESS_STEP_BYTES {
+                    last_reported = downloaded_total;
+                    emit_progress(webview, "downloading", downloaded_total, total);
+                }
+            },
+            || {
+                emit_progress(webview, "verifying", 0, None);
+            },
+        ),
+    )
+    .await
+    {
+        emit_progress(webview, "verifying", bytes.len() as u64, None);
+        update.verify(&bytes).map_err(|error| error.to_string())?;
         return Ok(bytes);
     }
 
@@ -342,7 +547,7 @@ async fn download_update(pending: &PendingUpdate) -> Result<Vec<u8>, String> {
         .take(DOWNLOAD_ATTEMPTS)
     {
         if let Some(mirror) = resolve_mirror(host).await
-            && let Ok(bytes) = fetch_from_mirror(update, &mirror).await
+            && let Ok(bytes) = fetch_from_mirror(update, &mirror, webview).await
         {
             return Ok(bytes);
         }
@@ -351,7 +556,10 @@ async fn download_update(pending: &PendingUpdate) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
-pub async fn install_desktop_update(webview: Webview, id: ResourceId) -> Result<(), String> {
+pub async fn install_desktop_update(
+    webview: Webview,
+    id: ResourceId,
+) -> Result<InstallOutcome, String> {
     let pending = webview
         .resources_table()
         .get::<PendingUpdate>(id)
@@ -360,15 +568,58 @@ pub async fn install_desktop_update(webview: Webview, id: ResourceId) -> Result<
         .install_lock
         .try_lock()
         .map_err(|error| error.to_string())?;
-    let bytes = download_update(&pending).await?;
-    pending
-        .update
-        .install(bytes)
-        .map_err(|error| error.to_string())?;
-    webview
-        .resources_table()
-        .close(id)
-        .map_err(|error| error.to_string())
+    let bytes = download_update(&pending, &webview).await?;
+
+    #[cfg(windows)]
+    {
+        emit_progress(&webview, "staging", bytes.len() as u64, None);
+        let root = updates_root_dir()?;
+        let version = pending.update.version.clone();
+        let installer_path =
+            tokio::task::spawn_blocking(move || stage_installer_bytes(&root, &version, &bytes))
+                .await
+                .map_err(|error| error.to_string())??;
+        let path_string = installer_path.display().to_string();
+        emit_progress(&webview, "launching", 0, None);
+        let mut command = Command::new(&installer_path);
+        if !pending.portable {
+            command.arg("/P");
+        }
+        let launched = command.spawn().is_ok();
+        webview
+            .resources_table()
+            .close(id)
+            .map_err(|error| error.to_string())?;
+        if launched {
+            let app = webview.app_handle().clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                app.exit(0);
+            });
+        }
+        Ok(InstallOutcome {
+            mode: "installer".to_owned(),
+            installer_path: Some(path_string),
+            launched,
+        })
+    }
+
+    #[cfg(not(windows))]
+    {
+        pending
+            .update
+            .install(bytes)
+            .map_err(|error| error.to_string())?;
+        webview
+            .resources_table()
+            .close(id)
+            .map_err(|error| error.to_string())?;
+        Ok(InstallOutcome {
+            mode: "inPlace".to_owned(),
+            installer_path: None,
+            launched: false,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -432,5 +683,46 @@ mod tests {
         ] {
             assert!(!local.parse().is_ok_and(public_ip));
         }
+    }
+
+    #[test]
+    fn stages_setup_exe_and_cleans_old_versions() {
+        let root = std::env::temp_dir().join(format!("spm_update_stage_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(stage_installer_bytes(&root, "../evil", b"MZ").is_err());
+        assert!(stage_installer_bytes(&root, "0.1.6/foo", b"MZ").is_err());
+
+        let staged = stage_installer_bytes(&root, "0.1.6", b"MZ-installer").unwrap();
+        assert_eq!(
+            staged.file_name().and_then(|n| n.to_str()),
+            Some("setup.exe")
+        );
+        assert_eq!(fs::read(&staged).unwrap(), b"MZ-installer");
+
+        let old = stage_installer_bytes(&root, "0.1.4", b"old").unwrap();
+        assert!(old.is_file());
+        cleanup_old_staged_updates(&root, "0.1.5");
+        assert!(!old.exists());
+        assert!(staged.is_file());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn detects_portable_mode_from_sibling_uninstaller() {
+        let dir = std::env::temp_dir().join(format!("spm_update_portable_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("spm-selftest.exe");
+        fs::write(&exe, b"").unwrap();
+
+        #[cfg(windows)]
+        assert!(is_portable_from_exe(&exe));
+
+        fs::write(dir.join("uninstall.exe"), b"").unwrap();
+        assert!(!is_portable_from_exe(&exe));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
