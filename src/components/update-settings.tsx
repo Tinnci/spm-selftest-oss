@@ -12,8 +12,14 @@ export function UpdateSettings({
   update: ReturnType<typeof useDesktopUpdate>;
   collecting: boolean;
 }) {
-  const { status, availableVersion, portable, progress, installerPath } =
-    update;
+  const {
+    status,
+    availableVersion,
+    portable,
+    portableReplace,
+    progress,
+    installerPath,
+  } = update;
   const waiting =
     status === "checking" || status === "installing" || status === "launching";
   const restartRequired = status === "restartRequired";
@@ -93,7 +99,7 @@ export function UpdateSettings({
         <span className="quiet basis-full" role="status">
           {message}
         </span>
-        {portable && availableVersion ? (
+        {portable && !portableReplace && availableVersion ? (
           <span className="quiet basis-full">
             {t("settings.update.portableHint")}
           </span>

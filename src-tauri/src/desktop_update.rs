@@ -44,6 +44,7 @@ struct PendingUpdate {
     update: Update,
     mirror: Option<Mirror>,
     portable: bool,
+    portable_replace: bool,
     install_lock: Mutex<()>,
 }
 
@@ -55,6 +56,7 @@ pub struct AvailableUpdate {
     id: ResourceId,
     version: String,
     portable: bool,
+    portable_replace: bool,
 }
 
 #[derive(Serialize)]
@@ -322,18 +324,23 @@ fn is_portable_from_exe(exe_path: &Path) -> bool {
     }
 }
 
-fn staged_installer_path(root: &Path, version: &str) -> Result<PathBuf, String> {
+fn staged_file_path(root: &Path, version: &str, file_name: &str) -> Result<PathBuf, String> {
     let clean = validate_version_segment(version)?;
-    Ok(root.join(format!("v{clean}")).join("setup.exe"))
+    Ok(root.join(format!("v{clean}")).join(file_name))
 }
 
-fn stage_installer_bytes(root: &Path, version: &str, bytes: &[u8]) -> Result<PathBuf, String> {
-    let dest = staged_installer_path(root, version)?;
+fn stage_named_file(
+    root: &Path,
+    version: &str,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    let dest = staged_file_path(root, version, file_name)?;
     let parent = dest
         .parent()
         .ok_or_else(|| "missing installer directory".to_owned())?;
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    let tmp = parent.join(format!(".setup.exe.tmp-{}", std::process::id()));
+    let tmp = parent.join(format!(".{file_name}.tmp-{}", std::process::id()));
     {
         let mut file = File::create(&tmp).map_err(|error| error.to_string())?;
         if let Err(error) = file.write_all(bytes) {
@@ -354,6 +361,102 @@ fn stage_installer_bytes(root: &Path, version: &str, bytes: &[u8]) -> Result<Pat
         error.to_string()
     })?;
     Ok(dest)
+}
+
+fn stage_installer_bytes(root: &Path, version: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    stage_named_file(root, version, "setup.exe", bytes)
+}
+
+fn old_exe_path(exe_path: &Path) -> Result<PathBuf, String> {
+    let parent = exe_path
+        .parent()
+        .ok_or_else(|| "missing executable directory".to_owned())?;
+    let name = exe_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "invalid executable name".to_owned())?;
+    Ok(parent.join(format!(".{name}.old")))
+}
+
+fn cleanup_old_exe_at(exe_path: &Path) {
+    let Ok(old_path) = old_exe_path(exe_path) else {
+        return;
+    };
+    if !old_path.exists() {
+        return;
+    }
+    for attempt in 0..5 {
+        if fs::remove_file(&old_path).is_ok() {
+            return;
+        }
+        if attempt < 4 {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
+
+pub fn cleanup_stale_portable_binary() {
+    let Ok(exe_path) = std::env::current_exe() else {
+        return;
+    };
+    if !is_portable_from_exe(&exe_path) {
+        return;
+    }
+    std::thread::spawn(move || {
+        cleanup_old_exe_at(&exe_path);
+    });
+}
+
+fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut last_err = None;
+    for attempt in 0..3 {
+        match fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_err = Some(error);
+                if attempt < 2 {
+                    std::thread::sleep(Duration::from_millis(150));
+                }
+            }
+        }
+    }
+    Err(last_err.expect("retry loop ran at least once"))
+}
+
+fn replace_portable_exe(exe_path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let parent = exe_path
+        .parent()
+        .ok_or_else(|| "missing executable directory".to_owned())?;
+    let name = exe_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "invalid executable name".to_owned())?;
+    let new_path = parent.join(format!(".{name}.new-{}", std::process::id()));
+    let old_path = old_exe_path(exe_path)?;
+    {
+        let mut file = File::create(&new_path).map_err(|error| error.to_string())?;
+        if let Err(error) = file.write_all(bytes) {
+            let _ = fs::remove_file(&new_path);
+            return Err(error.to_string());
+        }
+        if let Err(error) = file.sync_all() {
+            let _ = fs::remove_file(&new_path);
+            return Err(error.to_string());
+        }
+    }
+    if old_path.exists() {
+        let _ = fs::remove_file(&old_path);
+    }
+    if let Err(error) = rename_with_retry(exe_path, &old_path) {
+        let _ = fs::remove_file(&new_path);
+        return Err(error.to_string());
+    }
+    if let Err(error) = rename_with_retry(&new_path, exe_path) {
+        let _ = fs::rename(&old_path, exe_path);
+        let _ = fs::remove_file(&new_path);
+        return Err(error.to_string());
+    }
+    Ok(())
 }
 
 fn parse_version_tuple(raw: &str) -> Option<(u64, u64, u64)> {
@@ -425,18 +528,70 @@ fn store_update(
     update: Update,
     mirror: Option<Mirror>,
     portable: bool,
+    portable_replace: bool,
 ) -> AvailableUpdate {
     let version = update.version.clone();
     let id = webview.resources_table().add(PendingUpdate {
         update,
         mirror,
         portable,
+        portable_replace,
         install_lock: Mutex::new(()),
     });
     AvailableUpdate {
         id,
         version,
         portable,
+        portable_replace,
+    }
+}
+
+async fn check_with_updater(
+    webview: &Webview,
+    updater: &Updater,
+    portable: bool,
+    portable_replace: bool,
+) -> Result<Option<AvailableUpdate>, String> {
+    if let Ok(Ok(update)) = timeout(CHECK_TIMEOUT, updater.check()).await
+        && let Ok(update) = validate_update(update)
+    {
+        return Ok(
+            update.map(|update| store_update(webview, update, None, portable, portable_replace))
+        );
+    }
+
+    let candidates = mirror_candidates(None).await;
+    let mut probes = stream::iter(candidates)
+        .map(|host| probe_mirror(updater, host))
+        .buffer_unordered(PROBE_CONCURRENCY);
+    let mut reachable = false;
+    while let Some(result) = probes.next().await {
+        if let Some((mirror, update)) = result {
+            if let Some(update) = update {
+                return Ok(Some(store_update(
+                    webview,
+                    update,
+                    Some(mirror),
+                    portable,
+                    portable_replace,
+                )));
+            }
+            reachable = true;
+        }
+    }
+    if reachable {
+        Ok(None)
+    } else {
+        Err("the update feed is unreachable".to_owned())
+    }
+}
+
+#[cfg(windows)]
+fn portable_target_name() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "windows-aarch64-portable"
+    } else {
+        "windows-x86_64-portable"
     }
 }
 
@@ -451,35 +606,26 @@ pub async fn check_desktop_update(webview: Webview) -> Result<Option<AvailableUp
     let portable = std::env::current_exe()
         .ok()
         .is_some_and(|path| is_portable_from_exe(&path));
+
+    #[cfg(windows)]
+    if portable
+        && let Ok(portable_updater) = webview
+            .updater_builder()
+            .configure_client(http_client)
+            .target(portable_target_name())
+            .build()
+        && let Ok(Some(available)) =
+            check_with_updater(&webview, &portable_updater, portable, true).await
+    {
+        return Ok(Some(available));
+    }
+
     let updater = webview
         .updater_builder()
         .configure_client(http_client)
         .build()
         .map_err(|error| error.to_string())?;
-    if let Ok(Ok(update)) = timeout(CHECK_TIMEOUT, updater.check()).await
-        && let Ok(update) = validate_update(update)
-    {
-        return Ok(update.map(|update| store_update(&webview, update, None, portable)));
-    }
-
-    let candidates = mirror_candidates(None).await;
-    let mut probes = stream::iter(candidates)
-        .map(|host| probe_mirror(&updater, host))
-        .buffer_unordered(PROBE_CONCURRENCY);
-    let mut reachable = false;
-    while let Some(result) = probes.next().await {
-        if let Some((mirror, update)) = result {
-            if let Some(update) = update {
-                return Ok(Some(store_update(&webview, update, Some(mirror), portable)));
-            }
-            reachable = true;
-        }
-    }
-    if reachable {
-        Ok(None)
-    } else {
-        Err("the update feed is unreachable".to_owned())
-    }
+    check_with_updater(&webview, &updater, portable, false).await
 }
 
 async fn fetch_from_mirror(
@@ -573,8 +719,50 @@ pub async fn install_desktop_update(
     #[cfg(windows)]
     {
         emit_progress(&webview, "staging", bytes.len() as u64, None);
-        let root = updates_root_dir()?;
         let version = pending.update.version.clone();
+        if pending.portable_replace
+            && let Ok(exe_path) = std::env::current_exe()
+        {
+            let root = updates_root_dir()?;
+            let fallback_name = format!("SPM-SelfTest-v{version}.exe");
+            let target_exe = exe_path.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                if replace_portable_exe(&target_exe, &bytes).is_ok() {
+                    Ok((target_exe, true))
+                } else {
+                    stage_named_file(&root, &version, &fallback_name, &bytes)
+                        .map(|staged| (staged, false))
+                }
+            })
+            .await
+            .map_err(|error| error.to_string())??;
+
+            let (result_path, swapped) = result;
+            let launched = if swapped {
+                emit_progress(&webview, "launching", 0, None);
+                Command::new(&result_path).spawn().is_ok()
+            } else {
+                false
+            };
+            webview
+                .resources_table()
+                .close(id)
+                .map_err(|error| error.to_string())?;
+            if launched {
+                let app = webview.app_handle().clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    app.exit(0);
+                });
+            }
+            return Ok(InstallOutcome {
+                mode: "portable".to_owned(),
+                installer_path: Some(result_path.display().to_string()),
+                launched,
+            });
+        }
+
+        let root = updates_root_dir()?;
         let installer_path =
             tokio::task::spawn_blocking(move || stage_installer_bytes(&root, &version, &bytes))
                 .await
@@ -722,6 +910,25 @@ mod tests {
 
         fs::write(dir.join("uninstall.exe"), b"").unwrap();
         assert!(!is_portable_from_exe(&exe));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn replaces_portable_exe_and_cleans_old_binary() {
+        let dir = std::env::temp_dir().join(format!("spm_update_replace_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("SPM-SelfTest.exe");
+        fs::write(&exe, b"old-binary").unwrap();
+
+        replace_portable_exe(&exe, b"new-binary").unwrap();
+        assert_eq!(fs::read(&exe).unwrap(), b"new-binary");
+        let old = old_exe_path(&exe).unwrap();
+        assert_eq!(fs::read(&old).unwrap(), b"old-binary");
+
+        cleanup_old_exe_at(&exe);
+        assert!(!old.exists());
 
         let _ = fs::remove_dir_all(&dir);
     }

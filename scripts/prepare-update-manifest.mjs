@@ -39,11 +39,22 @@ for (const [platform, bundle, suffixes] of targets) {
   if (!signature) throw new Error(`Empty signature for ${platform}`);
 
   if (bundle === "nsis") {
-    for (const extension of ["exe", "zip", "sha256"]) {
+    for (const extension of ["exe", "exe.sig", "zip", "sha256"]) {
       const portable = `SPM-SelfTest-${version}-${platform}.${extension}`;
       if (!available.has(portable))
         throw new Error(`Missing portable asset ${portable}`);
     }
+    const portableExe = `SPM-SelfTest-${version}-${platform}.exe`;
+    const portableSig = readFileSync(
+      join(dirname(manifestPath), `${portableExe}.sig`),
+      "utf8",
+    ).trim();
+    if (!portableSig)
+      throw new Error(`Empty portable signature for ${platform}`);
+    platforms[`${platform}-portable`] = {
+      url: `${baseUrl}${encodeURIComponent(portableExe)}`,
+      signature: portableSig,
+    };
   }
 
   const entry = { url: `${baseUrl}${encodeURIComponent(name)}`, signature };

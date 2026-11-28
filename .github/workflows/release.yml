@@ -198,11 +198,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ARCH_LABEL: ${{ matrix.arch_label }}
           RELEASE_TAG: ${{ needs.draft.outputs.tag }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $version = $env:RELEASE_TAG.TrimStart('v')
           $name = "SPM-SelfTest-$version-$env:ARCH_LABEL"
           $bundleDir = Join-Path $env:RUNNER_TEMP "$name-bundle"
           $portable = Join-Path $env:RUNNER_TEMP "$name.exe"
+          $portableSig = "$portable.sig"
           $zip = Join-Path $env:RUNNER_TEMP "$name.zip"
           $checksum = Join-Path $env:RUNNER_TEMP "$name.sha256"
           $target = "src-tauri/target/release"
@@ -213,10 +216,12 @@ jobs:
           New-Item -ItemType Directory -Path $bundleDir | Out-Null
           Copy-Item "$target/spm-selftest.exe", "$target/spm-selftest-cli.exe", "docs/WINDOWS.md", LICENSE, NOTICE $bundleDir
           Copy-Item "$target/spm-selftest.exe" $portable
+          npx tauri signer sign $portable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -LiteralPath $bundleDir -DestinationPath $zip -CompressionLevel Fastest
           $sha = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
           Set-Content -Path $checksum -Value "$sha  $name.zip"
-          gh release upload "$env:RELEASE_TAG" $portable $zip $checksum --clobber
+          gh release upload "$env:RELEASE_TAG" $portable $portableSig $zip $checksum --clobber
 
   manifest:
     name: Verify assets and publish

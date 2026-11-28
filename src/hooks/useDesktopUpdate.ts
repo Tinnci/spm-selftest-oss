@@ -3,7 +3,12 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 
-type Update = { id: number; version: string; portable?: boolean };
+type Update = {
+  id: number;
+  version: string;
+  portable?: boolean;
+  portableReplace?: boolean;
+};
 
 export type UpdateProgress = {
   stage: "downloading" | "verifying" | "staging" | "launching";
@@ -12,7 +17,7 @@ export type UpdateProgress = {
 };
 
 type InstallOutcome = {
-  mode: "installer" | "inPlace";
+  mode: "installer" | "portable" | "inPlace";
   installerPath?: string | null;
   launched: boolean;
 };
@@ -84,7 +89,7 @@ export function useDesktopUpdate() {
         { id: update.id },
       );
       setUpdate(null);
-      if (outcome?.mode === "installer") {
+      if (outcome?.mode === "installer" || outcome?.mode === "portable") {
         setInstallerPath(outcome.installerPath ?? null);
         setStatus(outcome.launched ? "launching" : "manualInstall");
         return;
@@ -104,6 +109,7 @@ export function useDesktopUpdate() {
     status,
     availableVersion: update?.version,
     portable: Boolean(update?.portable),
+    portableReplace: Boolean(update?.portableReplace),
     progress,
     installerPath,
     checkForUpdate,

@@ -90,3 +90,27 @@ it("falls back to manualInstall when staged setup.exe fails to auto-launch", asy
   expect(result.current.installerPath).toContain("setup.exe");
   expect(relaunch).not.toHaveBeenCalled();
 });
+
+it("replaces portable executable in place without calling relaunch", async () => {
+  vi.stubEnv("VITE_ENABLE_UPDATER", "1");
+  vi.mocked(invoke)
+    .mockResolvedValueOnce({
+      id: 12,
+      version: "0.2.0",
+      portable: true,
+      portableReplace: true,
+    })
+    .mockResolvedValueOnce({
+      mode: "portable",
+      installerPath: "D:\\Tools\\SPM-SelfTest.exe",
+      launched: true,
+    });
+  const { result } = renderHook(useDesktopUpdate);
+  await waitFor(() => expect(result.current.availableVersion).toBe("0.2.0"));
+  expect(result.current.portableReplace).toBe(true);
+
+  await act(() => result.current.install());
+  expect(result.current.status).toBe("launching");
+  expect(result.current.installerPath).toBe("D:\\Tools\\SPM-SelfTest.exe");
+  expect(relaunch).not.toHaveBeenCalled();
+});
