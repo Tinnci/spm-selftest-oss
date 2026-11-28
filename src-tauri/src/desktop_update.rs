@@ -1,10 +1,11 @@
+#[cfg(windows)]
+use std::process::Command;
 use std::{
     collections::HashSet,
     fs::{self, File},
     io::Write,
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
-    process::Command,
     sync::LazyLock,
     time::Duration,
 };
@@ -43,7 +44,9 @@ static NODE: LazyLock<Regex> = LazyLock::new(|| {
 struct PendingUpdate {
     update: Update,
     mirror: Option<Mirror>,
+    #[cfg_attr(not(windows), allow(dead_code))]
     portable: bool,
+    #[cfg_attr(not(windows), allow(dead_code))]
     portable_replace: bool,
     install_lock: Mutex<()>,
 }
@@ -299,6 +302,7 @@ fn validate_update(update: Option<Update>) -> Result<Option<Update>, String> {
     Ok(update)
 }
 
+#[cfg(any(windows, test))]
 fn validate_version_segment(version: &str) -> Result<&str, String> {
     let clean = version.trim();
     if clean.is_empty()
@@ -324,11 +328,13 @@ fn is_portable_from_exe(exe_path: &Path) -> bool {
     }
 }
 
+#[cfg(any(windows, test))]
 fn staged_file_path(root: &Path, version: &str, file_name: &str) -> Result<PathBuf, String> {
     let clean = validate_version_segment(version)?;
     Ok(root.join(format!("v{clean}")).join(file_name))
 }
 
+#[cfg(any(windows, test))]
 fn stage_named_file(
     root: &Path,
     version: &str,
@@ -363,6 +369,7 @@ fn stage_named_file(
     Ok(dest)
 }
 
+#[cfg(any(windows, test))]
 fn stage_installer_bytes(root: &Path, version: &str, bytes: &[u8]) -> Result<PathBuf, String> {
     stage_named_file(root, version, "setup.exe", bytes)
 }
@@ -407,6 +414,7 @@ pub fn cleanup_stale_portable_binary() {
     });
 }
 
+#[cfg(any(windows, test))]
 fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
     let mut last_err = None;
     for attempt in 0..3 {
@@ -423,6 +431,7 @@ fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
     Err(last_err.expect("retry loop ran at least once"))
 }
 
+#[cfg(any(windows, test))]
 fn replace_portable_exe(exe_path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = exe_path
         .parent()
