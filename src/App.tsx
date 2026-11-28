@@ -289,6 +289,7 @@ function AppShell() {
             pinnedIds={preferences.pinnedIds}
             lastDetailTab={preferences.lastDetailTab}
             diffChangedOnly={preferences.diffChangedOnly}
+            sidebarDensity={preferences.sidebarDensity}
             onPreferencesChange={updatePreferences}
             shortcutsOpen={shortcutsOpen}
             onShortcutsOpenChange={setShortcutsOpen}

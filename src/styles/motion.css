@@ -125,3 +125,98 @@
   animation: selftest-content-enter var(--motion-enter) var(--motion-emphasized)
     both;
 }
+
+@keyframes selftest-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes selftest-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  55% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes selftest-fresh-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes selftest-soft-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger-strong) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--danger-strong) 18%, transparent);
+  }
+}
+
+.selftest-active-filters,
+.selftest-bulk {
+  animation: selftest-slide-down var(--motion-enter) var(--motion-emphasized)
+    both;
+}
+
+.selftest-filter-pill {
+  animation: selftest-pop 180ms var(--motion-emphasized) both;
+  transition:
+    background-color var(--motion-feedback) ease-out,
+    border-color var(--motion-feedback) ease-out,
+    transform var(--motion-feedback) var(--motion-emphasized);
+}
+
+.selftest-filter-pill:active {
+  transform: scale(0.95);
+}
+
+.selftest-pin-btn.is-pinned svg,
+.selftest-copy-value.is-copied svg,
+.selftest-mono-item.is-copied .selftest-mono-item-icon svg,
+.selftest-pre-copy.is-copied svg {
+  animation: selftest-pop 220ms var(--motion-emphasized) both;
+}
+
+.selftest-record-item.is-fresh {
+  animation: selftest-fresh-flash 1.6s var(--motion-emphasized) both;
+}
+
+.selftest-patch-pill.selftest-tone-error {
+  animation: selftest-soft-pulse 2.4s ease-in-out infinite;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .selftest-record-item:hover {
+    transform: translateX(2px);
+  }
+  .selftest-record-item {
+    transition:
+      background-color var(--motion-feedback) ease-out,
+      border-color var(--motion-feedback) ease-out,
+      color var(--motion-feedback) ease-out,
+      transform var(--motion-feedback) var(--motion-emphasized);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

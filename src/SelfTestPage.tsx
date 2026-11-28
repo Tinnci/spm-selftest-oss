@@ -153,6 +153,7 @@ export function SelfTestPage({
   pinnedIds: controlledPinnedIds,
   lastDetailTab = "gms",
   diffChangedOnly: controlledChangedOnly,
+  sidebarDensity: controlledDensity,
   onPreferencesChange,
   shortcutsOpen: controlledShortcutsOpen,
   onShortcutsOpenChange,
@@ -165,6 +166,7 @@ export function SelfTestPage({
   pinnedIds?: string[];
   lastDetailTab?: string;
   diffChangedOnly?: boolean;
+  sidebarDensity?: "comfortable" | "compact";
   onPreferencesChange?: typeof savePreferences;
   shortcutsOpen?: boolean;
   onShortcutsOpenChange?: (open: boolean) => void;
@@ -183,6 +185,10 @@ export function SelfTestPage({
     controlledChangedOnly ?? false,
   );
   const diffChangedOnly = controlledChangedOnly ?? localChangedOnly;
+  const [localDensity, setLocalDensity] = useState<"comfortable" | "compact">(
+    controlledDensity ?? "comfortable",
+  );
+  const sidebarDensity = controlledDensity ?? localDensity;
   const [localShortcutsOpen, setLocalShortcutsOpen] = useState(false);
   const shortcutsOpen = controlledShortcutsOpen ?? localShortcutsOpen;
   const setShortcutsOpen = onShortcutsOpenChange ?? setLocalShortcutsOpen;
@@ -245,6 +251,11 @@ export function SelfTestPage({
     setLocalChangedOnly(next);
     onPreferencesChange?.({ diffChangedOnly: next });
   };
+  const toggleDensity = () => {
+    const next = sidebarDensity === "compact" ? "comfortable" : "compact";
+    setLocalDensity(next);
+    onPreferencesChange?.({ sidebarDensity: next });
+  };
   const handleClearFilters = () => {
     const prev = clearFilters();
     if (!prev) return;
@@ -259,7 +270,7 @@ export function SelfTestPage({
   const [listFilter, setListFilter] = useState("");
   const [loadingRecords, setLoadingRecords] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<{
-    id: string;
+    ids: string[];
     label: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -605,23 +616,52 @@ export function SelfTestPage({
   };
 
   const requestDelete = (id: string, label: string) => {
-    setPendingDelete({ id, label });
+    setPendingDelete({ ids: [id], label });
+  };
+
+  const requestBulkDelete = (ids: string[]) => {
+    if (!ids.length) return;
+    if (ids.length === 1) {
+      const rec = records.find((r) => r.id === ids[0]);
+      setPendingDelete({
+        ids,
+        label: rec ? `${rec.model_code || rec.model} · ${rec.build}` : ids[0],
+      });
+      return;
+    }
+    setPendingDelete({ ids, label: String(ids.length) });
   };
 
   const handleDelete = async () => {
     if (!pendingDelete || deleting) return;
-    const id = pendingDelete.id;
+    const targetIds = pendingDelete.ids;
+    const deletedSet = new Set(targetIds);
     setDeleting(true);
     setError("");
     try {
-      await selfTestDelete(id);
-      const remaining = records.filter((r) => r.id !== id);
+      for (const id of targetIds) {
+        await selfTestDelete(id);
+      }
+      const remaining = records.filter((r) => !deletedSet.has(r.id));
       const nextId =
-        selectedId === id ? (remaining[0]?.id ?? null) : selectedId;
-      if (compareId === id) setCompareId("");
+        selectedId && deletedSet.has(selectedId)
+          ? (remaining[0]?.id ?? null)
+          : selectedId;
+      if (compareId && deletedSet.has(compareId)) setCompareId("");
+      setSelectedIds((prev) => prev.filter((id) => !deletedSet.has(id)));
+      const nextPinned = pinnedIds.filter((id) => !deletedSet.has(id));
+      if (nextPinned.length !== pinnedIds.length) {
+        setLocalPinnedIds(nextPinned);
+        onPreferencesChange?.({ pinnedIds: nextPinned });
+      }
       setSelectedId(nextId);
       setPendingDelete(null);
       await refreshList(nextId ?? undefined);
+      if (targetIds.length > 1) {
+        toast.success(
+          t("selftest.bulkDeletedToast", { count: targetIds.length }),
+        );
+      }
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -633,14 +673,11 @@ export function SelfTestPage({
     targetId: string,
     format: SelfTestExportFormat,
     encoding: ExportEncoding = "bom",
+    ids?: string[],
   ) => {
     setError("");
     try {
-      const outPath = await selfTestExportFile(
-        targetId,
-        format,
-        locale(),
-        encoding,
+      const xlsxOpts =
         format === "xlsx"
           ? {
               filename: xlsx.filename,
@@ -652,8 +689,23 @@ export function SelfTestPage({
                 .filter((field) => field.enabled)
                 .map((field) => field.key),
             }
-          : undefined,
-      );
+          : undefined;
+      const outPath = ids?.length
+        ? await selfTestExportFile(
+            targetId,
+            format,
+            locale(),
+            encoding,
+            xlsxOpts,
+            ids,
+          )
+        : await selfTestExportFile(
+            targetId,
+            format,
+            locale(),
+            encoding,
+            xlsxOpts,
+          );
       if (!outPath) return;
       setExportedPath(outPath);
       await Promise.resolve(revealPath(outPath)).catch(() => undefined);
@@ -1178,7 +1230,14 @@ export function SelfTestPage({
       recordContextActions={recordContextActions}
       handleExport={(id, format) => void handleExport(id, format)}
       pinnedIds={pinnedIds}
+      capturedId={capturedId}
+      sidebarDensity={sidebarDensity}
       onTogglePin={togglePin}
+      onToggleDensity={toggleDensity}
+      onExportSelected={(ids) =>
+        void handleExport("__all__", "csv", "bom", ids)
+      }
+      onBulkDelete={requestBulkDelete}
       onImportBackup={onImportBackup}
     />
   );
@@ -1793,12 +1852,20 @@ export function SelfTestPage({
         <DialogContent className="settings-dialog selftest-confirm-dialog">
           <DialogHeader>
             <DialogTitle className="workspace-dialog-title">
-              {t("selftest.deleteTitle")}
+              {pendingDelete && pendingDelete.ids.length > 1
+                ? t("selftest.bulkDeleteTitle", {
+                    count: pendingDelete.ids.length,
+                  })
+                : t("selftest.deleteTitle")}
             </DialogTitle>
             <DialogDescription>
-              {t("selftest.deleteBody", {
-                name: pendingDelete?.label ?? "",
-              })}
+              {pendingDelete && pendingDelete.ids.length > 1
+                ? t("selftest.bulkDeleteBody", {
+                    count: pendingDelete.ids.length,
+                  })
+                : t("selftest.deleteBody", {
+                    name: pendingDelete?.label ?? "",
+                  })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

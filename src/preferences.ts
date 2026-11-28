@@ -68,6 +68,7 @@ type Preferences = {
   pinnedIds: string[];
   lastDetailTab: string;
   diffChangedOnly: boolean;
+  sidebarDensity: "comfortable" | "compact";
 };
 
 const DEFAULT: Preferences = {
@@ -78,6 +79,7 @@ const DEFAULT: Preferences = {
   pinnedIds: [],
   lastDetailTab: "gms",
   diffChangedOnly: false,
+  sidebarDensity: "comfortable",
 };
 
 function readOrder<T extends string>(
@@ -122,6 +124,8 @@ export function readPreferences(): Preferences {
       lastDetailTab:
         typeof parsed.lastDetailTab === "string" ? parsed.lastDetailTab : "gms",
       diffChangedOnly: Boolean(parsed.diffChangedOnly),
+      sidebarDensity:
+        parsed.sidebarDensity === "compact" ? "compact" : "comfortable",
     };
   } catch {
     return DEFAULT;

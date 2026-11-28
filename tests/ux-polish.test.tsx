@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 import { HighlightText } from "@/components/ui/highlight-text";
 import { FilterableMonoList } from "@/components/self-test/filterable-mono-list";
 import { DiffPanel } from "@/components/self-test/diff-panel";
+import { RecordSidebar } from "@/components/self-test/record-sidebar";
+import { DEFAULT_RECORD_TAGS } from "@/preferences";
 import { formatRelativeTime, patchCountdown } from "@/selftest/date";
 import "@/i18n";
 
@@ -151,5 +154,106 @@ describe("UX polish helpers and components", () => {
       screen.getByRole("button", { name: /Changed only|仅看变更/i }),
     );
     expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports inline search clear, active filter pills, density toggle, and bulk actions in RecordSidebar", () => {
+    const setRecordQuery = vi.fn();
+    const setTypeFilter = vi.fn();
+    const onToggleDensity = vi.fn();
+    const onExportSelected = vi.fn();
+    const onBulkDelete = vi.fn();
+    const rec = {
+      id: "r1",
+      collected_at: "2026-11-28T10:00:00Z",
+      name: "Demo Run",
+      serial: "SER1",
+      note: "Sidebar note",
+      test_type: "IR" as const,
+      tags: ["gms"],
+      model_code: "M1",
+      ota_version: "V1",
+      verdict: "pending" as const,
+      check_status: "pass" as const,
+      check_errors: 0,
+      check_warnings: 0,
+      baseline_id: "",
+      patch_reference: "2026-11-28",
+      patch_valid_days: 90,
+      model: "Demo",
+      build: "B1",
+      android: "16",
+      gms: "15_r1",
+      patch: "2026-11-01",
+      package_count: 10,
+      feature_count: 5,
+    };
+
+    render(
+      <TooltipProvider>
+        <ToastProvider>
+          <RecordSidebar
+            recordTags={DEFAULT_RECORD_TAGS}
+            records={[rec]}
+            filteredRecords={[rec]}
+            recordGroups={[{ key: "today", label: "Today", items: [rec] }]}
+            loadingRecords={false}
+            selectedId="r1"
+            compareId=""
+            detail={null}
+            selectedIds={["r1"]}
+            recordQuery="Demo"
+            typeFilter="IR"
+            resultFilter="all"
+            reviewFilter="all"
+            recordSort="newest"
+            searchRef={createRef<HTMLInputElement>()}
+            setRecordQuery={setRecordQuery}
+            setTypeFilter={setTypeFilter}
+            setResultFilter={vi.fn()}
+            setReviewFilter={vi.fn()}
+            setRecordSort={vi.fn()}
+            setSelectedIds={vi.fn()}
+            setCompareId={vi.fn()}
+            showDiff={vi.fn()}
+            toggleSelectAll={vi.fn()}
+            toggleSelected={vi.fn()}
+            handleSelectRecord={vi.fn()}
+            refreshList={vi.fn()}
+            clearFilters={vi.fn()}
+            compareSelected={vi.fn()}
+            recordContextActions={() => []}
+            handleExport={vi.fn()}
+            sidebarDensity="compact"
+            onToggleDensity={onToggleDensity}
+            onExportSelected={onExportSelected}
+            onBulkDelete={onBulkDelete}
+          />
+        </ToastProvider>
+      </TooltipProvider>,
+    );
+
+    expect(screen.queryByText("Sidebar note")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Clear search|清空搜索/i }),
+    );
+    expect(setRecordQuery).toHaveBeenCalledWith("");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Remove filter: IR|移除筛选：IR/i }),
+    );
+    expect(setTypeFilter).toHaveBeenCalledWith("all");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Comfortable view|舒适视图/i }),
+    );
+    expect(onToggleDensity).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Export CSV|导出 CSV/i }),
+    );
+    expect(onExportSelected).toHaveBeenCalledWith(["r1"]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete|删除/i }));
+    expect(onBulkDelete).toHaveBeenCalledWith(["r1"]);
   });
 });

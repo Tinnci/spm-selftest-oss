@@ -382,6 +382,7 @@ export function selfTestExportFile(
   language: Language,
   encoding: ExportEncoding = "bom",
   xlsxOptions?: XlsxOptions,
+  ids?: string[],
 ): Promise<string | null> {
   return call<string | null>("self_test_export_file", {
     id,
@@ -389,6 +390,7 @@ export function selfTestExportFile(
     locale: language,
     encoding,
     ...(xlsxOptions ? { xlsxOptions } : {}),
+    ...(ids?.length ? { ids } : {}),
   });
 }
 

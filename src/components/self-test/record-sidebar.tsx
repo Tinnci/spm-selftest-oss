@@ -6,10 +6,14 @@ import {
   Inbox,
   Pin,
   RefreshCw,
+  Rows2,
+  Rows3,
   SearchX,
   Smartphone,
   SlidersHorizontal,
+  Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -79,7 +83,12 @@ export function RecordSidebar({
   recordContextActions,
   handleExport,
   pinnedIds = [],
+  capturedId,
+  sidebarDensity = "comfortable",
   onTogglePin,
+  onToggleDensity,
+  onExportSelected,
+  onBulkDelete,
   onImportBackup,
 }: {
   recordTags: RecordTagVisibility;
@@ -114,7 +123,12 @@ export function RecordSidebar({
   recordContextActions: (record: SelfTestSummary) => ContextAction[];
   handleExport: (id: string, format: SelfTestExportFormat) => void;
   pinnedIds?: string[];
+  capturedId?: string;
+  sidebarDensity?: "comfortable" | "compact";
   onTogglePin?: (id: string) => void;
+  onToggleDensity?: () => void;
+  onExportSelected?: (ids: string[]) => void;
+  onBulkDelete?: (ids: string[]) => void;
   onImportBackup?: () => void;
 }) {
   const { t } = useTranslation();
@@ -122,12 +136,36 @@ export function RecordSidebar({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const shiftKeyRef = useRef(false);
   const pinnedSet = new Set(pinnedIds);
-  const hasFilters = [typeFilter, resultFilter, reviewFilter].some(
-    (value) => value !== "all",
-  );
+  const activeFilters: Array<{
+    key: "type" | "result" | "review";
+    label: string;
+    clear: () => void;
+  }> = [];
+  if (typeFilter !== "all") {
+    activeFilters.push({
+      key: "type",
+      label: t(`selftest.type.${typeFilter}`),
+      clear: () => setTypeFilter("all"),
+    });
+  }
+  if (resultFilter !== "all") {
+    activeFilters.push({
+      key: "result",
+      label: t(`selftest.checkStatus.${resultFilter}`),
+      clear: () => setResultFilter("all"),
+    });
+  }
+  if (reviewFilter !== "all") {
+    activeFilters.push({
+      key: "review",
+      label: t(`selftest.review.state.${reviewFilter}`),
+      clear: () => setReviewFilter("all"),
+    });
+  }
+  const hasFilters = activeFilters.length > 0;
 
   return (
-    <aside className="selftest-sidebar">
+    <aside className="selftest-sidebar" data-density={sidebarDensity}>
       <div className="selftest-sidebar-head">
         <div className="local-row">
           <strong>
@@ -170,13 +208,29 @@ export function RecordSidebar({
           </div>
         </div>
         <div className="selftest-record-search">
-          <Input
-            ref={searchRef}
-            value={recordQuery}
-            placeholder={t("selftest.searchRecordsShort")}
-            aria-label={t("selftest.searchRecords")}
-            onChange={(e) => setRecordQuery(e.target.value)}
-          />
+          <div className="selftest-search-input-wrap">
+            <Input
+              ref={searchRef}
+              value={recordQuery}
+              placeholder={t("selftest.searchRecordsShort")}
+              aria-label={t("selftest.searchRecords")}
+              onChange={(e) => setRecordQuery(e.target.value)}
+            />
+            {recordQuery ? (
+              <button
+                type="button"
+                className="selftest-search-clear"
+                aria-label={t("selftest.clearSearch")}
+                title={t("selftest.clearSearch")}
+                onClick={() => {
+                  setRecordQuery("");
+                  searchRef.current?.focus();
+                }}
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
           <Button
             className="selftest-filter-toggle"
             variant={hasFilters || filtersOpen ? "secondary" : "outline"}
@@ -188,8 +242,31 @@ export function RecordSidebar({
             onClick={() => setFiltersOpen((open) => !open)}
           >
             <SlidersHorizontal aria-hidden="true" />
+            {hasFilters ? (
+              <span className="selftest-filter-count" aria-hidden="true">
+                {activeFilters.length}
+              </span>
+            ) : null}
           </Button>
         </div>
+        {hasFilters ? (
+          <div className="selftest-active-filters" role="region">
+            {activeFilters.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                className="selftest-filter-pill"
+                aria-label={t("selftest.activeFilterRemove", {
+                  label: filter.label,
+                })}
+                onClick={filter.clear}
+              >
+                <span>{filter.label}</span>
+                <X size={11} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div
           id={filtersId}
           className="selftest-filters"
@@ -261,6 +338,36 @@ export function RecordSidebar({
               />
               <span>{t("selftest.selectAll")}</span>
             </label>
+            {onToggleDensity ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={
+                        sidebarDensity === "compact"
+                          ? t("selftest.densityComfortable")
+                          : t("selftest.densityCompact")
+                      }
+                      aria-pressed={sidebarDensity === "compact"}
+                      onClick={onToggleDensity}
+                    >
+                      {sidebarDensity === "compact" ? (
+                        <Rows2 aria-hidden="true" />
+                      ) : (
+                        <Rows3 aria-hidden="true" />
+                      )}
+                    </Button>
+                  }
+                />
+                <TooltipContent>
+                  {sidebarDensity === "compact"
+                    ? t("selftest.densityComfortable")
+                    : t("selftest.densityCompact")}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
           </div>
         ) : null}
         {selectedIds.length ? (
@@ -289,6 +396,26 @@ export function RecordSidebar({
                 <GitCompare aria-hidden="true" />
                 {t("selftest.bulkCompare")}
               </Button>
+              {onExportSelected ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => onExportSelected(selectedIds)}
+                >
+                  <Download aria-hidden="true" />
+                  {t("selftest.bulkExportCsv")}
+                </Button>
+              ) : null}
+              {onBulkDelete ? (
+                <Button
+                  size="xs"
+                  variant="destructive"
+                  onClick={() => onBulkDelete(selectedIds)}
+                >
+                  <Trash2 aria-hidden="true" />
+                  {t("selftest.bulkDelete")}
+                </Button>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -338,7 +465,7 @@ export function RecordSidebar({
                   <li
                     key={rec.id}
                     data-status={rec.check_status}
-                    className={`selftest-record-item${selectedId === rec.id ? " is-active" : ""}${compareId === rec.id ? " is-baseline" : ""}${isPinned ? " is-pinned" : ""}`}
+                    className={`selftest-record-item${selectedId === rec.id ? " is-active" : ""}${compareId === rec.id ? " is-baseline" : ""}${isPinned ? " is-pinned" : ""}${capturedId === rec.id ? " is-fresh" : ""}`}
                   >
                     <ContextTarget
                       title={`${rec.model_code || rec.model} · ${rec.build}`}
@@ -431,7 +558,8 @@ export function RecordSidebar({
                                     : ""}
                               </Badge>
                             ) : null}
-                            {recordTags.soc &&
+                            {sidebarDensity !== "compact" &&
+                            recordTags.soc &&
                             rec.soc_vendor &&
                             rec.soc_vendor !== "Unknown" &&
                             rec.soc_vendor !== "(not set)" ? (
@@ -458,7 +586,8 @@ export function RecordSidebar({
                                 {t(`selftest.verdict.${rec.verdict}`)}
                               </Badge>
                             ) : null}
-                            {recordTags.android ? (
+                            {sidebarDensity !== "compact" &&
+                            recordTags.android ? (
                               <Badge
                                 variant="outline"
                                 className="selftest-badge-android"
@@ -486,12 +615,14 @@ export function RecordSidebar({
                               </Badge>
                             ) : null}
                           </div>
-                          {recordTags.tags && rec.tags.length ? (
+                          {sidebarDensity !== "compact" &&
+                          recordTags.tags &&
+                          rec.tags.length ? (
                             <p className="selftest-record-tags">
                               {rec.tags.join(" · ")}
                             </p>
                           ) : null}
-                          {rec.note ? (
+                          {sidebarDensity !== "compact" && rec.note ? (
                             <p className="selftest-record-note">{rec.note}</p>
                           ) : null}
                         </button>

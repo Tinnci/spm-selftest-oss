@@ -216,7 +216,7 @@ jobs:
           New-Item -ItemType Directory -Path $bundleDir | Out-Null
           Copy-Item "$target/spm-selftest.exe", "$target/spm-selftest-cli.exe", "docs/WINDOWS.md", LICENSE, NOTICE $bundleDir
           Copy-Item "$target/spm-selftest.exe" $portable
-          npx tauri signer sign $portable
+          npx tauri signer sign --app-version $version $portable
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -LiteralPath $bundleDir -DestinationPath $zip -CompressionLevel Fastest
           $sha = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()

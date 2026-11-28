@@ -931,13 +931,20 @@ pub async fn self_test_export_file(
     locale: Option<String>,
     encoding: Option<String>,
     xlsx_options: Option<XlsxOptions>,
+    ids: Option<Vec<String>>,
 ) -> Result<Option<String>, SelfTestError> {
     use tauri_plugin_dialog::DialogExt;
 
     let zh = locale.as_deref() != Some("en");
 
     if format == "csv" {
-        let summaries = if id == "__all__" {
+        let summaries = if let Some(filter_ids) = ids.filter(|list| !list.is_empty()) {
+            let wanted: std::collections::HashSet<String> = filter_ids.into_iter().collect();
+            read_index()?
+                .into_iter()
+                .filter(|item| wanted.contains(&item.id))
+                .collect()
+        } else if id == "__all__" {
             read_index()?
         } else {
             let rec = self_test_get(id)?;
