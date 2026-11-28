@@ -65,7 +65,18 @@ export function KeyValueList({
           >
             <dt>{item.label}</dt>
             <dd>
-              <span title={item.title}>{item.value}</span>
+              {copyable ? (
+                <button
+                  type="button"
+                  className="selftest-kv-value"
+                  title={item.title ?? t("selftest.ctxCopyValue")}
+                  onClick={() => void handleCopy(item.key, item.value)}
+                >
+                  {item.value}
+                </button>
+              ) : (
+                <span title={item.title}>{item.value}</span>
+              )}
               {item.badge}
               {copyable ? (
                 <button

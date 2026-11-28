@@ -1778,3 +1778,29 @@
   align-items: center;
   gap: 6px;
 }
+
+.selftest-kv-value {
+  padding: 1px 4px;
+  margin: -1px -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  word-break: break-all;
+  cursor: pointer;
+}
+.selftest-kv-value:hover {
+  background: var(--muted);
+}
+
+.selftest-drm-fact-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.selftest-drm-fact-btn:hover [data-slot="badge"] {
+  background: var(--muted);
+}

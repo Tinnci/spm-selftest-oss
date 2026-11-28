@@ -6,7 +6,10 @@ import { ToastProvider } from "@/components/ui/toast";
 import { HighlightText } from "@/components/ui/highlight-text";
 import { FilterableMonoList } from "@/components/self-test/filterable-mono-list";
 import { DiffPanel } from "@/components/self-test/diff-panel";
+import { DrmPanel } from "@/components/self-test/drm-panel";
+import { KeyValueList } from "@/components/self-test/key-value-list";
 import { RecordSidebar } from "@/components/self-test/record-sidebar";
+import { copyText } from "@/api/shell";
 import { DEFAULT_RECORD_TAGS } from "@/preferences";
 import { formatRelativeTime, patchCountdown } from "@/selftest/date";
 import "@/i18n";
@@ -255,5 +258,31 @@ describe("UX polish helpers and components", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Delete|删除/i }));
     expect(onBulkDelete).toHaveBeenCalledWith(["r1"]);
+  });
+
+  it("supports click-to-copy on KeyValueList values and DrmPanel facts/sections", () => {
+    render(
+      <ToastProvider>
+        <KeyValueList
+          items={[{ key: "build", label: "Build ID", value: "BUILD-XYZ" }]}
+        />
+        <DrmPanel
+          facts={["securityLevel=L1"]}
+          sections={[{ name: "widevine", lines: ["version=18.0", "level=L1"] }]}
+        />
+      </ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "BUILD-XYZ" }));
+    expect(copyText).toHaveBeenCalledWith("BUILD-XYZ");
+
+    fireEvent.click(screen.getByRole("button", { name: "securityLevel=L1" }));
+    expect(copyText).toHaveBeenCalledWith("securityLevel=L1");
+
+    const preCopyButtons = screen.getAllByRole("button", {
+      name: /Copy value|复制值/i,
+    });
+    fireEvent.click(preCopyButtons[preCopyButtons.length - 1]);
+    expect(copyText).toHaveBeenCalledWith("version=18.0\nlevel=L1");
   });
 });
