@@ -2,13 +2,14 @@
 use std::process::Command;
 use std::{
     collections::HashSet,
-    fs::{self, File},
-    io::Write,
+    fs,
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
     sync::LazyLock,
     time::Duration,
 };
+#[cfg(any(windows, test))]
+use std::{fs::File, io::Write};
 
 use futures_util::{StreamExt, stream};
 use regex::Regex;

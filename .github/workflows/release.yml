@@ -11,7 +11,7 @@ on:
         type: string
 
 concurrency:
-  group: desktop-release-${{ inputs.tag || github.ref_name }}
+  group: desktop-release
   cancel-in-progress: false
 
 permissions:

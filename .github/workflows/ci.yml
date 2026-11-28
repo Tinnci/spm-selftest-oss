@@ -21,11 +21,27 @@ env:
 jobs:
   frontend:
     name: Frontend checks
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore(release):') }}
     runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.changes.outputs.native }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 2
+      - name: Detect native changes
+        id: changes
+        run: |
+          if [[ "${{ github.event_name }}" != "push" ]]; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+          elif ! git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only HEAD~1 HEAD | grep -Eq '^(src-tauri/|\.github/workflows/ci\.yml$)'; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "native=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -50,6 +66,7 @@ jobs:
   native:
     name: Native checks and build (${{ matrix.os }})
     needs: frontend
+    if: ${{ needs.frontend.outputs.native == 'true' }}
     strategy:
       fail-fast: false
       matrix:
