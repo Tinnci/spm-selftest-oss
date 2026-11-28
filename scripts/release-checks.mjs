@@ -85,8 +85,15 @@ test("manifest keeps updater keys and requires signed binaries for all architect
     return [name, signature];
   });
   for (const platform of ["windows-x86_64", "windows-aarch64"]) {
-    for (const extension of ["exe", "zip", "sha256"]) {
-      assets.push(`SPM-SelfTest-0.1.5-${platform}.${extension}`);
+    for (const extension of ["exe", "exe.sig", "zip", "sha256"]) {
+      const portableName = `SPM-SelfTest-0.1.5-${platform}.${extension}`;
+      if (extension === "exe.sig") {
+        writeFileSync(
+          join(dir, portableName),
+          `signature for ${platform} portable\n`,
+        );
+      }
+      assets.push(portableName);
     }
   }
   const manifestPath = join(dir, "latest.json");
@@ -115,11 +122,19 @@ test("manifest keeps updater keys and requires signed binaries for all architect
   assert.deepEqual(Object.keys(manifest.platforms), [
     "linux-x86_64",
     "linux-x86_64-appimage",
+    "windows-x86_64-portable",
     "windows-x86_64",
     "windows-x86_64-nsis",
+    "windows-aarch64-portable",
     "windows-aarch64",
     "windows-aarch64-nsis",
   ]);
+  const winPortable = manifest.platforms["windows-x86_64-portable"];
+  assert.equal(winPortable.signature, "signature for windows-x86_64 portable");
+  assert.equal(
+    winPortable.url,
+    "https://github.com/owner/repo/releases/download/v0.1.5/SPM-SelfTest-0.1.5-windows-x86_64.exe",
+  );
   const arm = manifest.platforms["windows-aarch64"];
   assert.deepEqual(arm, manifest.platforms["windows-aarch64-nsis"]);
   assert.equal(arm.signature, `signature for ${assetNames[2]}`);
