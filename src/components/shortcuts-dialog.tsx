@@ -9,6 +9,7 @@ import {
 
 const SHORTCUTS = [
   { keys: ["Ctrl/⌘", "K"], labelKey: "selftest.shortcuts.search" },
+  { keys: ["Ctrl/⌘", "S"], labelKey: "selftest.shortcuts.saveMeta" },
   { keys: ["Ctrl/⌘", "Enter"], labelKey: "selftest.shortcuts.collect" },
   { keys: ["↑ / ↓", "J / K"], labelKey: "selftest.shortcuts.navigate" },
   { keys: ["1 – 7"], labelKey: "selftest.shortcuts.tabs" },

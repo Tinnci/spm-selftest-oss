@@ -166,9 +166,14 @@
 }
 
 .selftest-active-filters,
-.selftest-bulk {
+.selftest-bulk,
+.selftest-meta-bar {
   animation: selftest-slide-down var(--motion-enter) var(--motion-emphasized)
     both;
+}
+
+.selftest-meta-toggle svg {
+  transition: transform var(--motion-enter) var(--motion-emphasized);
 }
 
 .selftest-filter-pill {

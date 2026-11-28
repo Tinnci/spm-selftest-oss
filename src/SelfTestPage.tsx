@@ -225,6 +225,7 @@ export function SelfTestPage({
   }>();
   const checkFieldRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SelfTestRecord | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>(() =>
@@ -588,6 +589,43 @@ export function SelfTestPage({
     if (!next) return;
     setPendingSwitch(null);
     await openRecord(next);
+  };
+
+  const handleQuickVerdict = async (verdict: SelfTestVerdict) => {
+    if (!detail || savingMeta || detail.verdict === verdict) return;
+    setError("");
+    try {
+      const updated = await selfTestUpdateMeta({
+        id: detail.id,
+        note: detail.note,
+        name: detail.name,
+        testType: detail.test_type,
+        tags: detail.tags,
+        modelCode: detail.model_code,
+        otaVersion: detail.ota_version,
+        verdict,
+        patchReference: detail.patch_reference,
+        patchValidDays: detail.patch_valid_days,
+      });
+      applyDetail(updated);
+      await refreshList(updated.id);
+      toast.success(t("selftest.saved"));
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const handleResetMeta = () => {
+    if (!detail) return;
+    setEditName(detail.name);
+    setEditTestType(detail.test_type);
+    setEditTags((detail.tags ?? []).join(", "));
+    setEditNote(detail.note);
+    setEditModelCode(detail.model_code);
+    setEditOtaVersion(detail.ota_version);
+    setEditVerdict(detail.verdict);
+    setEditPatchReference(detail.patch_reference || localDate());
+    setEditPatchValidDays(detail.patch_valid_days || 90);
   };
 
   const quickSetVerdict = async (
@@ -1110,6 +1148,10 @@ export function SelfTestPage({
     openCollection: () => collection.onOpenChange(true),
     selectTab: selectDetailTab,
     toggleShortcuts: () => setShortcutsOpen(!shortcutsOpen),
+    saveMeta: () => {
+      if (metaDirty && !savingMeta) void saveMetaDraft();
+    },
+    metaDirty: Boolean(metaDirty),
     visibleTabs,
   });
   actionRef.current = {
@@ -1120,6 +1162,10 @@ export function SelfTestPage({
     openCollection: () => collection.onOpenChange(true),
     selectTab: selectDetailTab,
     toggleShortcuts: () => setShortcutsOpen(!shortcutsOpen),
+    saveMeta: () => {
+      if (metaDirty && !savingMeta) void saveMetaDraft();
+    },
+    metaDirty: Boolean(metaDirty),
     visibleTabs,
   };
 
@@ -1129,6 +1175,13 @@ export function SelfTestPage({
       if (meta && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchRef.current?.focus();
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "s") {
+        if (actionRef.current.metaDirty) {
+          event.preventDefault();
+          actionRef.current.saveMeta();
+        }
         return;
       }
       if (meta && event.key === "Enter") {
@@ -1269,7 +1322,19 @@ export function SelfTestPage({
         <>
           <header className="selftest-detail-header">
             <div>
-              <h2 ref={recordTitleRef} tabIndex={-1}>
+              <h2
+                ref={recordTitleRef}
+                className="selftest-detail-title"
+                tabIndex={-1}
+                title={t("selftest.doubleClickRename")}
+                onDoubleClick={() => {
+                  setMetaOpen(true);
+                  window.setTimeout(() => {
+                    nameInputRef.current?.focus();
+                    nameInputRef.current?.select();
+                  }, 0);
+                }}
+              >
                 {detail.name ||
                   `${detail.fields.model} · ${detail.fields.build}`}
               </h2>
@@ -1314,6 +1379,39 @@ export function SelfTestPage({
                       : ""}
                   </Badge>
                 ) : null}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        className={`selftest-verdict-pill is-${detail.verdict}`}
+                        aria-label={`${t("selftest.verdictLabel")}: ${t(`selftest.verdict.${detail.verdict}`)}`}
+                      >
+                        <span>{t(`selftest.verdict.${detail.verdict}`)}</span>
+                        <ChevronDown size={11} aria-hidden="true" />
+                      </button>
+                    }
+                  />
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem
+                      onClick={() => void handleQuickVerdict("pass")}
+                    >
+                      <CheckCircle2 aria-hidden="true" />
+                      {t("selftest.verdict.pass")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => void handleQuickVerdict("fail")}
+                    >
+                      <XCircle aria-hidden="true" />
+                      {t("selftest.verdict.fail")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => void handleQuickVerdict("pending")}
+                    >
+                      {t("selftest.verdict.pending")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {baselineSummary ? (
                   <span className="quiet">
                     {t("selftest.autoBaseline", {
@@ -1470,6 +1568,7 @@ export function SelfTestPage({
                   label={t("selftest.name")}
                 >
                   <Input
+                    ref={nameInputRef}
                     aria-label={t("selftest.name")}
                     value={editName}
                     placeholder={t("selftest.namePlaceholder")}
@@ -1596,14 +1695,25 @@ export function SelfTestPage({
                   >
                     {metaDirty ? t("selftest.unsaved") : "\u00a0"}
                   </span>
-                  <Button
-                    variant={metaDirty ? "default" : "outline"}
-                    disabled={savingMeta || !metaDirty}
-                    onClick={() => void handleSaveMeta()}
-                  >
-                    {savingMeta ? <Spinner aria-hidden="true" /> : null}
-                    {t("selftest.saveNote")}
-                  </Button>
+                  <div className="selftest-submit-actions">
+                    {metaDirty ? (
+                      <Button
+                        variant="ghost"
+                        disabled={savingMeta}
+                        onClick={handleResetMeta}
+                      >
+                        {t("selftest.discard")}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant={metaDirty ? "default" : "outline"}
+                      disabled={savingMeta || !metaDirty}
+                      onClick={() => void handleSaveMeta()}
+                    >
+                      {savingMeta ? <Spinner aria-hidden="true" /> : null}
+                      {t("selftest.saveNote")}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

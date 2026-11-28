@@ -632,4 +632,37 @@ describe("SelfTestPage", () => {
       expect(screen.queryByText("没有匹配的记录")).toBeNull(),
     );
   });
+
+  it("supports double-click rename, discard button, and Ctrl+S save", async () => {
+    renderPage();
+    const user = userEvent.setup();
+    const heading = await screen.findByRole("heading", {
+      name: "DEMO_IR_V14_20261119",
+    });
+    await user.dblClick(heading);
+    const nameInput = (await screen.findByLabelText(
+      "记录名称",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe("DEMO_IR_V14_20261119");
+
+    await user.clear(nameInput);
+    await user.type(nameInput, "RENAMED_RECORD");
+    expect(nameInput.value).toBe("RENAMED_RECORD");
+
+    await user.click(screen.getByRole("button", { name: "放弃修改" }));
+    expect(nameInput.value).toBe("DEMO_IR_V14_20261119");
+
+    selfTestUpdateMeta.mockResolvedValueOnce({
+      ...detail,
+      name: "SAVED_BY_SHORTCUT",
+    });
+    await user.clear(nameInput);
+    await user.type(nameInput, "SAVED_BY_SHORTCUT");
+    await user.keyboard("{Control>}s{/Control}");
+    await waitFor(() =>
+      expect(selfTestUpdateMeta).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "SAVED_BY_SHORTCUT" }),
+      ),
+    );
+  });
 });
