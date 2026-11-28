@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   selfTestRun,
+  type AdbDevice,
   type SelfTestRecord,
   type TestType,
 } from "@/api/self_test";
@@ -13,10 +14,12 @@ export function useSelfTestCollection({
   loadingRecords,
   blocked,
   onCaptured,
+  onDeviceConnected,
 }: {
   loadingRecords: boolean;
   blocked: boolean;
   onCaptured: (record: SelfTestRecord, fromDialog: boolean) => Promise<void>;
+  onDeviceConnected?: (device: AdbDevice) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [collecting, setCollecting] = useState(false);
@@ -31,6 +34,7 @@ export function useSelfTestCollection({
   const adb = useAdbEnv({
     busy: collecting || loadingRecords,
     onError: setError,
+    onDeviceConnected,
   });
   const ready = adb.env?.devices.some(
     (device) => device.serial === adb.serial && device.state === "device",

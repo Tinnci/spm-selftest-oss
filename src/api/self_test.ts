@@ -423,10 +423,12 @@ export function exportSelfTestBackup(
 export function importSelfTestBackup(
   language: Language,
   overwrite = false,
+  path?: string,
 ): Promise<BackupArchiveSummary | null> {
   return call<BackupArchiveSummary | null>("self_test_backup_import", {
     locale: language,
     overwrite,
+    ...(path ? { path } : {}),
   });
 }
 

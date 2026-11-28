@@ -879,24 +879,42 @@ pub async fn self_test_backup_import(
     app: tauri::AppHandle,
     locale: Option<String>,
     overwrite: Option<bool>,
+    path: Option<String>,
 ) -> Result<Option<BackupArchiveSummary>, SelfTestError> {
+    use std::path::PathBuf;
     use tauri_plugin_dialog::DialogExt;
 
-    let zh = locale.as_deref() != Some("en");
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_title(if zh {
-            "导入自测数据备份 (ZIP)"
-        } else {
-            "Import self-test data backup (ZIP)"
-        })
-        .add_filter("ZIP", &["zip"])
-        .pick_file(move |path| {
-            let _ = tx.send(path);
-        });
-    let Some(path) = rx.await.ok().flatten().and_then(|p| p.into_path().ok()) else {
-        return Ok(None);
+    let path = if let Some(raw) = path.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty()) {
+        let candidate = PathBuf::from(&raw);
+        let is_zip = candidate
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"));
+        if !is_zip || !candidate.is_file() {
+            return Err(SelfTestError::with_message(
+                "io_failed",
+                "Expected an existing .zip backup archive",
+            ));
+        }
+        candidate
+    } else {
+        let zh = locale.as_deref() != Some("en");
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog()
+            .file()
+            .set_title(if zh {
+                "导入自测数据备份 (ZIP)"
+            } else {
+                "Import self-test data backup (ZIP)"
+            })
+            .add_filter("ZIP", &["zip"])
+            .pick_file(move |picked| {
+                let _ = tx.send(picked);
+            });
+        let Some(picked) = rx.await.ok().flatten().and_then(|p| p.into_path().ok()) else {
+            return Ok(None);
+        };
+        picked
     };
     let root = data_dir()?;
     let overwrite = overwrite.unwrap_or(false);

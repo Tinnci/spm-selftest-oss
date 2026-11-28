@@ -19,6 +19,7 @@ import {
   Inbox,
   LayoutGrid,
   MoreHorizontal,
+  Pin,
   RefreshCw,
   SearchX,
   ShieldCheck,
@@ -65,6 +66,7 @@ import { FilterableMonoList } from "./components/self-test/filterable-mono-list"
 import { HardwarePanel } from "./components/self-test/hardware-panel";
 import { KeyValueList } from "./components/self-test/key-value-list";
 import { RecordSidebar } from "./components/self-test/record-sidebar";
+import { ShortcutsDialog } from "./components/shortcuts-dialog";
 import { useCopyWithToast } from "./hooks/useCopyWithToast";
 import { useSelfTestCollection } from "./hooks/useSelfTestCollection";
 import { revealPath } from "./api/shell";
@@ -96,6 +98,7 @@ import {
   DEFAULT_XLSX,
   type RecordTagVisibility,
   type XlsxPreferences,
+  type savePreferences,
 } from "./preferences";
 import {
   FIELD_ORDER,
@@ -106,11 +109,21 @@ import {
 import { errorText } from "./selftest/errors";
 import { groupedChecks, vendorBootBackupCheck } from "./selftest/checks";
 import { TEST_TYPES } from "./selftest/constants";
-import { localDate } from "./selftest/date";
+import { localDate, patchCountdown } from "./selftest/date";
 import { useRecordBrowser } from "./hooks/useRecordBrowser";
 
 type DetailTab =
   "gms" | "drm" | "hardware" | "packages" | "features" | "launcher" | "diff";
+
+const VALID_TABS = new Set<DetailTab>([
+  "gms",
+  "drm",
+  "hardware",
+  "packages",
+  "features",
+  "launcher",
+  "diff",
+]);
 
 const CHECK_FIELD: Record<string, string> = {
   patch_format: "patch",
@@ -137,17 +150,42 @@ export function SelfTestPage({
   onActivity,
   recordTags = DEFAULT_RECORD_TAGS,
   xlsx = DEFAULT_XLSX,
+  pinnedIds: controlledPinnedIds,
+  lastDetailTab = "gms",
+  diffChangedOnly: controlledChangedOnly,
+  onPreferencesChange,
+  shortcutsOpen: controlledShortcutsOpen,
+  onShortcutsOpenChange,
+  onImportBackup,
   refreshKey = 0,
 }: {
   onActivity?: (busy: boolean) => void;
   recordTags?: RecordTagVisibility;
   xlsx?: XlsxPreferences;
+  pinnedIds?: string[];
+  lastDetailTab?: string;
+  diffChangedOnly?: boolean;
+  onPreferencesChange?: typeof savePreferences;
+  shortcutsOpen?: boolean;
+  onShortcutsOpenChange?: (open: boolean) => void;
+  onImportBackup?: () => void;
   refreshKey?: number;
 }) {
   useTranslation();
   const toast = useToast();
   const copyWithToast = useCopyWithToast();
   const [error, setError] = useState("");
+  const [localPinnedIds, setLocalPinnedIds] = useState<string[]>(
+    controlledPinnedIds ?? [],
+  );
+  const pinnedIds = controlledPinnedIds ?? localPinnedIds;
+  const [localChangedOnly, setLocalChangedOnly] = useState(
+    controlledChangedOnly ?? false,
+  );
+  const diffChangedOnly = controlledChangedOnly ?? localChangedOnly;
+  const [localShortcutsOpen, setLocalShortcutsOpen] = useState(false);
+  const shortcutsOpen = controlledShortcutsOpen ?? localShortcutsOpen;
+  const setShortcutsOpen = onShortcutsOpenChange ?? setLocalShortcutsOpen;
 
   const [records, setRecords] = useState<SelfTestSummary[]>([]);
   const {
@@ -168,7 +206,8 @@ export function SelfTestPage({
     toggleSelected,
     toggleSelectAll,
     clearFilters,
-  } = useRecordBrowser(records);
+    restoreFilters,
+  } = useRecordBrowser(records, pinnedIds);
   const checksRef = useRef<HTMLElement>(null);
   const recordTitleRef = useRef<HTMLHeadingElement>(null);
   const focusAfterCapture = useRef(false);
@@ -182,7 +221,41 @@ export function SelfTestPage({
   const searchRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SelfTestRecord | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>("gms");
+  const [detailTab, setDetailTab] = useState<DetailTab>(() =>
+    VALID_TABS.has(lastDetailTab as DetailTab)
+      ? (lastDetailTab as DetailTab)
+      : "gms",
+  );
+  const selectDetailTab = (next: DetailTab) => {
+    setDetailTab(next);
+    onPreferencesChange?.({ lastDetailTab: next });
+  };
+  const togglePin = (id: string) => {
+    const next = pinnedIds.includes(id)
+      ? pinnedIds.filter((item) => item !== id)
+      : [...pinnedIds, id];
+    setLocalPinnedIds(next);
+    onPreferencesChange?.({ pinnedIds: next });
+    toast.info(
+      t(next.includes(id) ? "selftest.pinnedToast" : "selftest.unpinnedToast"),
+    );
+  };
+  const toggleChangedOnly = () => {
+    const next = !diffChangedOnly;
+    setLocalChangedOnly(next);
+    onPreferencesChange?.({ diffChangedOnly: next });
+  };
+  const handleClearFilters = () => {
+    const prev = clearFilters();
+    if (!prev) return;
+    toast.info(t("selftest.filtersCleared"), {
+      timeout: 5000,
+      action: {
+        label: t("selftest.undo"),
+        onClick: () => restoreFilters(prev),
+      },
+    });
+  };
   const [listFilter, setListFilter] = useState("");
   const [loadingRecords, setLoadingRecords] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<{
@@ -247,7 +320,7 @@ export function SelfTestPage({
     );
   };
 
-  const refreshList = async (selectId?: string) => {
+  const refreshList = async (selectId?: string): Promise<SelfTestSummary[]> => {
     try {
       const list = await selfTestList();
       setRecords(list);
@@ -260,8 +333,10 @@ export function SelfTestPage({
         applyDetail(null);
       }
       setError("");
+      return list;
     } catch (e) {
       if (desktop()) setError(errorText(e));
+      return [];
     } finally {
       setLoadingRecords(false);
     }
@@ -270,6 +345,13 @@ export function SelfTestPage({
   const collection = useSelfTestCollection({
     loadingRecords,
     blocked: savingMeta || checking,
+    onDeviceConnected: (device) => {
+      toast.info(
+        t("selftest.deviceConnected", {
+          device: device.model || device.serial,
+        }),
+      );
+    },
     onCaptured: async (record, fromDialog) => {
       focusAfterCapture.current = fromDialog;
       setCapturedId(record.id);
@@ -278,8 +360,21 @@ export function SelfTestPage({
       setListFilter("");
       applyDetail(record);
       setSelectedId(record.id);
-      setDetailTab("gms");
-      await refreshList(record.id);
+      selectDetailTab("gms");
+      const list = await refreshList(record.id);
+      const smart = pickSmartBaseline(record, list);
+      toast.success(t("selftest.captureSaved"), {
+        timeout: 6000,
+        action: smart
+          ? {
+              label: t("selftest.compareWithPrevious"),
+              onClick: () => {
+                setCompareId(smart);
+                selectDetailTab("diff");
+              },
+            }
+          : undefined,
+      });
     },
   });
   const busy = collection.busy || loadingRecords;
@@ -562,6 +657,16 @@ export function SelfTestPage({
       if (!outPath) return;
       setExportedPath(outPath);
       await Promise.resolve(revealPath(outPath)).catch(() => undefined);
+      toast.success(t("selftest.exportedToast"), {
+        description: outPath,
+        timeout: 5000,
+        action: desktop()
+          ? {
+              label: t("settings.reveal"),
+              onClick: () => void revealPath(outPath),
+            }
+          : undefined,
+      });
     } catch (e) {
       setError(errorText(e));
     }
@@ -609,16 +714,23 @@ export function SelfTestPage({
     if (selectedIds.length !== 2) return;
     await handleSelectRecord(selectedIds[0]);
     setCompareId(selectedIds[1]);
-    setDetailTab("diff");
+    selectDetailTab("diff");
   };
 
   const recordContextActions = (rec: SelfTestSummary): ContextAction[] => {
+    const isPinned = pinnedIds.includes(rec.id);
     const actions: ContextAction[] = [
       {
         id: "open",
         label: t("selftest.ctxOpen"),
         icon: FileText,
         run: () => handleSelectRecord(rec.id),
+      },
+      {
+        id: "pin",
+        label: isPinned ? t("selftest.ctxUnpin") : t("selftest.ctxPin"),
+        icon: Pin,
+        run: () => togglePin(rec.id),
       },
       ...(detail && detail.id !== rec.id
         ? [
@@ -628,7 +740,7 @@ export function SelfTestPage({
               icon: GitCompare,
               run: () => {
                 setCompareId(rec.id);
-                setDetailTab("diff");
+                selectDetailTab("diff");
               },
             },
           ]
@@ -869,15 +981,94 @@ export function SelfTestPage({
     return () => window.clearTimeout(timeout);
   }, [fieldTarget]);
 
+  const visibleTabs: ScrollableTabItem<DetailTab>[] = detail
+    ? [
+        {
+          id: "gms",
+          label: t("selftest.tab.gms"),
+          tabId: "selftest-tab-gms",
+          panelId: "selftest-panel-gms",
+          dot: checkGroups.error.length
+            ? ("error" as const)
+            : checkGroups.warn.length
+              ? ("warn" as const)
+              : undefined,
+        },
+        {
+          id: "drm",
+          label: t("selftest.tab.drm"),
+          tabId: "selftest-tab-drm",
+          panelId: "selftest-panel-drm",
+        },
+        ...(detail.hardware
+          ? [
+              {
+                id: "hardware",
+                label: t("selftest.hardware.tab"),
+                tabId: "selftest-tab-hardware",
+                panelId: "selftest-panel-hardware",
+              } satisfies ScrollableTabItem<DetailTab>,
+            ]
+          : []),
+        {
+          id: "packages",
+          label: t("selftest.tab.packages", {
+            count: detail.packages.length,
+          }),
+          tabId: "selftest-tab-packages",
+          panelId: "selftest-panel-packages",
+        },
+        {
+          id: "features",
+          label: t("selftest.tab.features", {
+            count: detail.features.length,
+          }),
+          tabId: "selftest-tab-features",
+          panelId: "selftest-panel-features",
+        },
+        {
+          id: "launcher",
+          icon: <LayoutGrid size={13} aria-hidden="true" />,
+          label: t("selftest.tab.launcher", {
+            count: activeLauncherLayout?.items.length ?? 0,
+          }),
+          tabId: "selftest-tab-launcher",
+          panelId: "selftest-panel-launcher",
+        },
+        ...(records.length > 1
+          ? [
+              {
+                id: "diff",
+                icon: <GitCompare size={13} aria-hidden="true" />,
+                label: t("selftest.tab.diff"),
+                tabId: "selftest-tab-diff",
+                panelId: "selftest-panel-diff",
+                dot: diffTotal > 0 ? ("info" as const) : undefined,
+              } satisfies ScrollableTabItem<DetailTab>,
+            ]
+          : []),
+      ]
+    : [];
+
   const actionRef = useRef({
     run: collection.run,
     select: handleSelectRecord,
-    clear: clearFilters,
+    clear: handleClearFilters,
+    recheck: handleRecheck,
+    openCollection: () => collection.onOpenChange(true),
+    selectTab: selectDetailTab,
+    toggleShortcuts: () => setShortcutsOpen(!shortcutsOpen),
+    visibleTabs,
   });
   actionRef.current = {
     run: collection.run,
     select: handleSelectRecord,
-    clear: clearFilters,
+    clear: handleClearFilters,
+    recheck: handleRecheck,
+    openCollection: () => collection.onOpenChange(true),
+    selectTab: selectDetailTab,
+    toggleShortcuts: () => setShortcutsOpen(!shortcutsOpen),
+    visibleTabs,
   };
 
   useEffect(() => {
@@ -903,19 +1094,49 @@ export function SelfTestPage({
         )
       )
         return;
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const lower = event.key.toLowerCase();
+      if (
+        event.key === "ArrowDown" ||
+        lower === "j" ||
+        event.key === "ArrowUp" ||
+        lower === "k"
+      ) {
         if (!filteredRecords.length) return;
         event.preventDefault();
         const index = filteredRecords.findIndex(
           (record) => record.id === selectedId,
         );
-        const nextIndex =
-          event.key === "ArrowDown"
-            ? Math.min(index + 1, filteredRecords.length - 1)
-            : Math.max(index - 1, 0);
+        const down = event.key === "ArrowDown" || lower === "j";
+        const nextIndex = down
+          ? Math.min(index + 1, filteredRecords.length - 1)
+          : Math.max(index - 1, 0);
         const next = filteredRecords[Math.max(nextIndex, 0)];
         if (next && next.id !== selectedId)
           void actionRef.current.select(next.id);
+        return;
+      }
+      if (event.key >= "1" && event.key <= "7") {
+        const tab = actionRef.current.visibleTabs[Number(event.key) - 1];
+        if (tab) {
+          event.preventDefault();
+          actionRef.current.selectTab(tab.id);
+        }
+        return;
+      }
+      if (lower === "n" && !meta && !event.altKey) {
+        event.preventDefault();
+        actionRef.current.openCollection();
+        return;
+      }
+      if (lower === "r" && !meta && !event.altKey) {
+        event.preventDefault();
+        void actionRef.current.recheck();
+        return;
+      }
+      if (event.key === "?") {
+        event.preventDefault();
+        actionRef.current.toggleShortcuts();
+        return;
       }
       if (event.key === "Escape") actionRef.current.clear();
     };
@@ -947,15 +1168,18 @@ export function SelfTestPage({
       setRecordSort={setRecordSort}
       setSelectedIds={setSelectedIds}
       setCompareId={setCompareId}
-      showDiff={() => setDetailTab("diff")}
+      showDiff={() => selectDetailTab("diff")}
       toggleSelectAll={toggleSelectAll}
       toggleSelected={toggleSelected}
       handleSelectRecord={(id) => void handleSelectRecord(id)}
       refreshList={(id) => void refreshList(id)}
-      clearFilters={clearFilters}
+      clearFilters={handleClearFilters}
       compareSelected={() => void compareSelected()}
       recordContextActions={recordContextActions}
       handleExport={(id, format) => void handleExport(id, format)}
+      pinnedIds={pinnedIds}
+      onTogglePin={togglePin}
+      onImportBackup={onImportBackup}
     />
   );
   const recordDetail = (
@@ -992,7 +1216,24 @@ export function SelfTestPage({
               </h2>
               <p className="quiet">
                 {detail.test_type ? `${detail.test_type} · ` : ""}
-                {detail.fields.model} · {detail.fields.build} · {detail.serial}{" "}
+                {detail.fields.model} ·{" "}
+                <button
+                  type="button"
+                  className="selftest-meta-chip"
+                  title={t("selftest.ctxCopyValue")}
+                  onClick={() => void copyWithToast(detail.fields.build)}
+                >
+                  {detail.fields.build}
+                </button>{" "}
+                ·{" "}
+                <button
+                  type="button"
+                  className="selftest-meta-chip"
+                  title={t("selftest.ctxCopyValue")}
+                  onClick={() => void copyWithToast(detail.serial)}
+                >
+                  {detail.serial}
+                </button>{" "}
                 · {detail.collected_at.slice(0, 19).replace("T", " ")}
               </p>
               <div className="selftest-detail-checks">
@@ -1310,74 +1551,9 @@ export function SelfTestPage({
           ) : null}
 
           <ScrollableTabs
-            tabs={[
-              {
-                id: "gms",
-                label: t("selftest.tab.gms"),
-                tabId: "selftest-tab-gms",
-                panelId: "selftest-panel-gms",
-                dot: checkGroups.error.length
-                  ? ("error" as const)
-                  : checkGroups.warn.length
-                    ? ("warn" as const)
-                    : undefined,
-              },
-              {
-                id: "drm",
-                label: t("selftest.tab.drm"),
-                tabId: "selftest-tab-drm",
-                panelId: "selftest-panel-drm",
-              },
-              ...(detail.hardware
-                ? [
-                    {
-                      id: "hardware",
-                      label: t("selftest.hardware.tab"),
-                      tabId: "selftest-tab-hardware",
-                      panelId: "selftest-panel-hardware",
-                    } satisfies ScrollableTabItem<DetailTab>,
-                  ]
-                : []),
-              {
-                id: "packages",
-                label: t("selftest.tab.packages", {
-                  count: detail.packages.length,
-                }),
-                tabId: "selftest-tab-packages",
-                panelId: "selftest-panel-packages",
-              },
-              {
-                id: "features",
-                label: t("selftest.tab.features", {
-                  count: detail.features.length,
-                }),
-                tabId: "selftest-tab-features",
-                panelId: "selftest-panel-features",
-              },
-              {
-                id: "launcher",
-                icon: <LayoutGrid size={13} aria-hidden="true" />,
-                label: t("selftest.tab.launcher", {
-                  count: activeLauncherLayout?.items.length ?? 0,
-                }),
-                tabId: "selftest-tab-launcher",
-                panelId: "selftest-panel-launcher",
-              },
-              ...(records.length > 1
-                ? [
-                    {
-                      id: "diff",
-                      icon: <GitCompare size={13} aria-hidden="true" />,
-                      label: t("selftest.tab.diff"),
-                      tabId: "selftest-tab-diff",
-                      panelId: "selftest-panel-diff",
-                      dot: diffTotal > 0 ? ("info" as const) : undefined,
-                    } satisfies ScrollableTabItem<DetailTab>,
-                  ]
-                : []),
-            ]}
+            tabs={visibleTabs}
             value={detailTab}
-            onChange={setDetailTab}
+            onChange={selectDetailTab}
             ariaLabel={t("selftest.detailTabs")}
             scrollKey={detail.id}
           />
@@ -1392,10 +1568,33 @@ export function SelfTestPage({
                 const highlighted =
                   fieldTarget?.key === key &&
                   fieldTarget.recordId === detail.id;
+                const value = detail.fields[key] ?? "(not set)";
+                const countdown =
+                  key === "patch"
+                    ? patchCountdown(
+                        value,
+                        detail.patch_reference,
+                        detail.patch_valid_days,
+                      )
+                    : null;
                 return {
                   key,
                   label: t(`selftest.field.${key}`),
-                  value: detail.fields[key] ?? "(not set)",
+                  value,
+                  badge: countdown ? (
+                    <Badge
+                      variant="outline"
+                      className={`selftest-patch-pill${countdown.expired ? " selftest-tone-error" : countdown.soon ? " selftest-tone-warn" : ""}`}
+                    >
+                      {countdown.expired
+                        ? t("selftest.patchExpiredAgo", {
+                            days: Math.abs(countdown.remainingDays),
+                          })
+                        : t("selftest.patchDaysLeft", {
+                            days: countdown.remainingDays,
+                          })}
+                    </Badge>
+                  ) : undefined,
                   highlighted,
                   rowRef: highlighted ? checkFieldRef : undefined,
                 };
@@ -1440,6 +1639,8 @@ export function SelfTestPage({
               setDiffScope={setDiffScope}
               diffFilter={diffFilter}
               setDiffFilter={setDiffFilter}
+              changedOnly={diffChangedOnly}
+              onToggleChangedOnly={toggleChangedOnly}
               shownFieldChanges={shownFieldChanges}
               shownDrmAdded={shownDrmAdded}
               shownDrmRemoved={shownDrmRemoved}
@@ -1623,6 +1824,8 @@ export function SelfTestPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>
   );
 }

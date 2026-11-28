@@ -1404,3 +1404,212 @@
     justify-self: stretch;
   }
 }
+
+.ui-highlight {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: inherit;
+}
+
+.ui-toast-action {
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--on-solid) 26%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--on-solid) 12%, transparent);
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ui-toast-action:hover {
+  background: color-mix(in srgb, var(--on-solid) 22%, transparent);
+}
+
+.selftest-mono-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.selftest-mono-item:hover {
+  background: var(--muted);
+}
+.selftest-mono-item-text {
+  min-width: 0;
+  word-break: break-all;
+}
+.selftest-mono-item-icon {
+  flex: none;
+  opacity: 0;
+  color: var(--muted-foreground);
+  transition: opacity 120ms ease;
+}
+.selftest-mono-item:hover .selftest-mono-item-icon,
+.selftest-mono-item:focus-visible .selftest-mono-item-icon,
+.selftest-mono-item.is-copied .selftest-mono-item-icon {
+  opacity: 1;
+}
+.selftest-mono-item.is-copied .selftest-mono-item-icon {
+  color: var(--ok);
+}
+
+.selftest-pre-wrap {
+  position: relative;
+}
+.selftest-pre-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0.75;
+}
+.selftest-pre-copy:hover,
+.selftest-pre-copy.is-copied {
+  opacity: 1;
+  color: var(--foreground);
+}
+.selftest-pre-copy.is-copied {
+  color: var(--ok);
+}
+
+.selftest-meta-chip {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.selftest-meta-chip:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.selftest-patch-pill {
+  margin-left: 6px;
+  font-size: 11px;
+}
+
+.selftest-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  flex: none;
+}
+
+.selftest-pin-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+.selftest-record-card:hover .selftest-pin-btn,
+.selftest-pin-btn:focus-visible,
+.selftest-pin-btn.is-pinned {
+  opacity: 1;
+}
+.selftest-pin-btn:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.selftest-pin-btn.is-pinned {
+  color: var(--accent);
+}
+
+.selftest-diff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.selftest-diff-toolbar > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.selftest-diff-changed-only {
+  flex: none;
+  white-space: nowrap;
+}
+
+.shortcuts-grid {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.shortcuts-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.shortcuts-keys kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--background);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.shortcuts-row dd {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.app-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--background) 80%, transparent);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.app-drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 36px;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 12px 32px color-mix(in srgb, #000 18%, transparent);
+}

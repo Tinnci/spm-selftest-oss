@@ -3,6 +3,7 @@ import {
   selfTestAdbRestart,
   selfTestEnv,
   selfTestWaitDevice,
+  type AdbDevice,
   type SelfTestEnv,
 } from "@/api/self_test";
 import { desktop } from "@/api/transport";
@@ -13,9 +14,11 @@ const ENV_POLL_MS = 5000;
 export function useAdbEnv({
   busy,
   onError,
+  onDeviceConnected,
 }: {
   busy: boolean;
   onError: (message: string) => void;
+  onDeviceConnected?: (device: AdbDevice) => void;
 }) {
   const [adbPath, setAdbPath] = useState("");
   const [env, setEnv] = useState<SelfTestEnv | null>(null);
@@ -23,10 +26,22 @@ export function useAdbEnv({
   const [serial, setSerial] = useState("");
   const [adbBusy, setAdbBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
+  const knownReadyRef = useRef<Set<string> | null>(null);
+  const onDeviceConnectedRef = useRef(onDeviceConnected);
+  onDeviceConnectedRef.current = onDeviceConnected;
 
   const applyEnv = (next: SelfTestEnv) => {
     setEnv(next);
     const ready = next.devices.filter((device) => device.state === "device");
+    const readySerials = new Set(ready.map((device) => device.serial));
+    if (knownReadyRef.current !== null) {
+      for (const device of ready) {
+        if (!knownReadyRef.current.has(device.serial)) {
+          onDeviceConnectedRef.current?.(device);
+        }
+      }
+    }
+    knownReadyRef.current = readySerials;
     setSerial((current) => {
       if (!ready.length) return "";
       if (ready.length === 1) {

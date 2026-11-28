@@ -90,7 +90,15 @@ export function SettingsDialog({
           path: res.path,
         });
         setBackupStatus(message);
-        toast.success(message);
+        toast.success(message, {
+          timeout: 5000,
+          action: desktop()
+            ? {
+                label: t("settings.reveal"),
+                onClick: () => void revealPath(res.path),
+              }
+            : undefined,
+        });
       }
     } catch (error) {
       const message = t("settings.backupFailed", {
@@ -121,7 +129,15 @@ export function SettingsDialog({
                 skipped: res.skipped,
               });
         setBackupStatus(message);
-        toast.success(message);
+        toast.success(message, {
+          timeout: 5000,
+          action: desktop()
+            ? {
+                label: t("settings.reveal"),
+                onClick: () => void revealPath(res.path),
+              }
+            : undefined,
+        });
         if (res.imported > 0) {
           onBackupImported?.();
         }

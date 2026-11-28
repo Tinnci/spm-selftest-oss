@@ -1,9 +1,19 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SelfTestSummary } from "@/api/self_test";
 import { localDate } from "@/selftest/date";
 
-export function useRecordBrowser(records: SelfTestSummary[]) {
+export type FilterSnapshot = {
+  recordQuery: string;
+  typeFilter: string;
+  resultFilter: string;
+  reviewFilter: string;
+};
+
+export function useRecordBrowser(
+  records: SelfTestSummary[],
+  pinnedIds: string[] = [],
+) {
   const { t } = useTranslation();
   const [recordQuery, setRecordQuery] = useState("");
   const deferredQuery = useDeferredValue(recordQuery);
@@ -12,6 +22,9 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
   const [typeFilter, setTypeFilter] = useState("all");
   const [resultFilter, setResultFilter] = useState("all");
   const [reviewFilter, setReviewFilter] = useState("all");
+  const lastSelectedIdRef = useRef<string | null>(null);
+
+  const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
 
   const filteredRecords = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -28,11 +41,14 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
           .toLowerCase()
           .includes(q);
       })
-      .sort((left, right) =>
-        recordSort === "newest"
+      .sort((left, right) => {
+        const leftPinned = pinnedSet.has(left.id) ? 0 : 1;
+        const rightPinned = pinnedSet.has(right.id) ? 0 : 1;
+        if (leftPinned !== rightPinned) return leftPinned - rightPinned;
+        return recordSort === "newest"
           ? right.collected_at.localeCompare(left.collected_at)
-          : left.collected_at.localeCompare(right.collected_at),
-      );
+          : left.collected_at.localeCompare(right.collected_at);
+      });
   }, [
     records,
     deferredQuery,
@@ -40,6 +56,7 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
     resultFilter,
     reviewFilter,
     recordSort,
+    pinnedSet,
   ]);
 
   const recordGroups = useMemo(() => {
@@ -53,6 +70,7 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
     const today = localDate();
     const yesterday = shift(1);
     const weekAgo = shift(6);
+    const pinnedItems: SelfTestSummary[] = [];
     const groups = [
       {
         key: "today",
@@ -76,15 +94,45 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
       },
     ];
     for (const record of filteredRecords) {
+      if (pinnedSet.has(record.id)) {
+        pinnedItems.push(record);
+        continue;
+      }
       const day = record.collected_at.slice(0, 10);
       const index =
         day === today ? 0 : day === yesterday ? 1 : day >= weekAgo ? 2 : 3;
       groups[index].items.push(record);
     }
-    return groups.filter((group) => group.items.length > 0);
-  }, [filteredRecords, t]);
+    const nonEmpty = groups.filter((group) => group.items.length > 0);
+    if (pinnedItems.length > 0) {
+      return [
+        {
+          key: "pinned",
+          label: t("selftest.groupPinned"),
+          items: pinnedItems,
+        },
+        ...nonEmpty,
+      ];
+    }
+    return nonEmpty;
+  }, [filteredRecords, pinnedSet, t]);
 
-  const toggleSelected = (id: string) => {
+  const toggleSelected = (id: string, shiftKey = false) => {
+    const anchor = lastSelectedIdRef.current;
+    if (shiftKey && anchor && anchor !== id) {
+      const ids = filteredRecords.map((r) => r.id);
+      const from = ids.indexOf(anchor);
+      const to = ids.indexOf(id);
+      if (from !== -1 && to !== -1) {
+        const start = Math.min(from, to);
+        const end = Math.max(from, to);
+        const range = ids.slice(start, end + 1);
+        setSelectedIds((prev) => Array.from(new Set([...prev, ...range])));
+        lastSelectedIdRef.current = id;
+        return;
+      }
+    }
+    lastSelectedIdRef.current = id;
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
@@ -97,11 +145,30 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
     setSelectedIds(allSelected ? [] : visible);
   };
 
-  const clearFilters = () => {
+  const clearFilters = (): FilterSnapshot | null => {
+    const hasActive =
+      recordQuery !== "" ||
+      typeFilter !== "all" ||
+      resultFilter !== "all" ||
+      reviewFilter !== "all";
+    const snapshot: FilterSnapshot = {
+      recordQuery,
+      typeFilter,
+      resultFilter,
+      reviewFilter,
+    };
     setRecordQuery("");
     setTypeFilter("all");
     setResultFilter("all");
     setReviewFilter("all");
+    return hasActive ? snapshot : null;
+  };
+
+  const restoreFilters = (snapshot: FilterSnapshot) => {
+    setRecordQuery(snapshot.recordQuery);
+    setTypeFilter(snapshot.typeFilter);
+    setResultFilter(snapshot.resultFilter);
+    setReviewFilter(snapshot.reviewFilter);
   };
 
   return {
@@ -122,5 +189,6 @@ export function useRecordBrowser(records: SelfTestSummary[]) {
     toggleSelected,
     toggleSelectAll,
     clearFilters,
+    restoreFilters,
   };
 }

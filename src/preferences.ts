@@ -65,6 +65,9 @@ type Preferences = {
   guideDismissed: boolean;
   recordTags: RecordTagVisibility;
   xlsx: XlsxPreferences;
+  pinnedIds: string[];
+  lastDetailTab: string;
+  diffChangedOnly: boolean;
 };
 
 const DEFAULT: Preferences = {
@@ -72,6 +75,9 @@ const DEFAULT: Preferences = {
   guideDismissed: false,
   recordTags: DEFAULT_RECORD_TAGS,
   xlsx: DEFAULT_XLSX,
+  pinnedIds: [],
+  lastDetailTab: "gms",
+  diffChangedOnly: false,
 };
 
 function readOrder<T extends string>(
@@ -110,6 +116,12 @@ export function readPreferences(): Preferences {
         fields: readOrder(parsed.xlsx?.fields, DEFAULT_XLSX.fields),
         drmColumns: readOrder(parsed.xlsx?.drmColumns, DEFAULT_XLSX.drmColumns),
       },
+      pinnedIds: Array.isArray(parsed.pinnedIds)
+        ? parsed.pinnedIds.filter((id): id is string => typeof id === "string")
+        : [],
+      lastDetailTab:
+        typeof parsed.lastDetailTab === "string" ? parsed.lastDetailTab : "gms",
+      diffChangedOnly: Boolean(parsed.diffChangedOnly),
     };
   } catch {
     return DEFAULT;

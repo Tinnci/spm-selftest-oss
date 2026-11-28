@@ -1,13 +1,15 @@
-import { Fragment, useId, useState } from "react";
+import { Fragment, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
 import {
   Download,
   GitCompare,
   Inbox,
+  Pin,
   RefreshCw,
   SearchX,
   Smartphone,
   SlidersHorizontal,
+  Upload,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -19,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/empty-state";
+import { HighlightText } from "@/components/ui/highlight-text";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -27,7 +30,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ContextTarget, type ContextAction } from "@/components/context-menu";
+import { locale } from "@/i18n";
 import { TEST_TYPES } from "@/selftest/constants";
+import { formatRelativeTime } from "@/selftest/date";
 import type { RecordTagVisibility } from "@/preferences";
 import {
   checkStatusLabel,
@@ -73,6 +78,9 @@ export function RecordSidebar({
   compareSelected,
   recordContextActions,
   handleExport,
+  pinnedIds = [],
+  onTogglePin,
+  onImportBackup,
 }: {
   recordTags: RecordTagVisibility;
   records: SelfTestSummary[];
@@ -98,17 +106,22 @@ export function RecordSidebar({
   setCompareId: (value: string) => void;
   showDiff: () => void;
   toggleSelectAll: () => void;
-  toggleSelected: (id: string) => void;
+  toggleSelected: (id: string, shiftKey?: boolean) => void;
   handleSelectRecord: (id: string) => void;
   refreshList: (id?: string) => void;
   clearFilters: () => void;
   compareSelected: () => void;
   recordContextActions: (record: SelfTestSummary) => ContextAction[];
   handleExport: (id: string, format: SelfTestExportFormat) => void;
+  pinnedIds?: string[];
+  onTogglePin?: (id: string) => void;
+  onImportBackup?: () => void;
 }) {
   const { t } = useTranslation();
   const filtersId = useId();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const shiftKeyRef = useRef(false);
+  const pinnedSet = new Set(pinnedIds);
   const hasFilters = [typeFilter, resultFilter, reviewFilter].some(
     (value) => value !== "all",
   );
@@ -302,6 +315,14 @@ export function RecordSidebar({
             icon={Inbox}
             title={t("selftest.emptyRecordsTitle")}
             description={t("selftest.noRecordsShort")}
+            action={
+              onImportBackup ? (
+                <Button variant="outline" size="xs" onClick={onImportBackup}>
+                  <Upload aria-hidden="true" />
+                  {t("settings.backupImport")}
+                </Button>
+              ) : undefined
+            }
           />
         )
       ) : (
@@ -311,168 +332,226 @@ export function RecordSidebar({
               <li className="selftest-group-label" role="presentation">
                 {group.label}
               </li>
-              {group.items.map((rec) => (
-                <li
-                  key={rec.id}
-                  data-status={rec.check_status}
-                  className={`selftest-record-item${selectedId === rec.id ? " is-active" : ""}${compareId === rec.id ? " is-baseline" : ""}`}
-                >
-                  <ContextTarget
-                    title={`${rec.model_code || rec.model} · ${rec.build}`}
-                    actions={recordContextActions(rec)}
+              {group.items.map((rec) => {
+                const isPinned = pinnedSet.has(rec.id);
+                return (
+                  <li
+                    key={rec.id}
+                    data-status={rec.check_status}
+                    className={`selftest-record-item${selectedId === rec.id ? " is-active" : ""}${compareId === rec.id ? " is-baseline" : ""}${isPinned ? " is-pinned" : ""}`}
                   >
-                    <div className="selftest-record-card">
-                      <Checkbox
-                        className="selftest-record-check"
-                        checked={selectedIds.includes(rec.id)}
-                        onCheckedChange={() => toggleSelected(rec.id)}
-                        aria-label={t("selftest.selectRecordCheckbox")}
-                      />
-                      <button
-                        type="button"
-                        className="selftest-record-btn"
-                        aria-current={
-                          selectedId === rec.id ? "true" : undefined
-                        }
-                        onClick={() => void handleSelectRecord(rec.id)}
-                      >
-                        <div className="selftest-record-top">
-                          <strong
-                            title={rec.name || rec.model_code || rec.model}
-                          >
-                            <Smartphone size={13} aria-hidden="true" />
-                            <span>
-                              {rec.name || rec.model_code || rec.model}
-                            </span>
-                          </strong>
-                        </div>
-                        <div className="selftest-record-meta">
-                          <span className="selftest-record-build">
-                            {rec.test_type ? `${rec.test_type} · ` : ""}
-                            {rec.build}
-                          </span>
-                          <time
-                            className="quiet"
-                            dateTime={rec.collected_at}
-                            title={rec.collected_at
-                              .slice(0, 19)
-                              .replace("T", " ")}
-                          >
-                            {rec.collected_at.slice(0, 10)}
-                          </time>
-                        </div>
-                        <div className="selftest-record-badges">
-                          {compareId === rec.id ? (
-                            <Badge
-                              variant="secondary"
-                              className="selftest-badge-baseline"
-                            >
-                              {t("selftest.diffBaseline")}
-                            </Badge>
-                          ) : null}
-                          {recordTags.checks ? (
-                            <Badge
-                              variant={checkStatusVariant(rec.check_status)}
-                              className={checkStatusTone(rec.check_status)}
-                            >
-                              {checkStatusLabel(rec.check_status)}
-                              {rec.check_errors
-                                ? ` ${rec.check_errors}`
-                                : rec.check_warnings
-                                  ? ` ${rec.check_warnings}`
-                                  : ""}
-                            </Badge>
-                          ) : null}
-                          {recordTags.soc &&
-                          rec.soc_vendor &&
-                          rec.soc_vendor !== "Unknown" &&
-                          rec.soc_vendor !== "(not set)" ? (
-                            <Badge
-                              variant="outline"
-                              className="selftest-badge-soc"
-                            >
-                              {rec.soc_vendor}
-                              {rec.soc_model && rec.soc_model !== "(not set)"
-                                ? ` · ${rec.soc_model}`
-                                : ""}
-                            </Badge>
-                          ) : null}
-                          {recordTags.verdict ? (
-                            <Badge
-                              variant={
-                                rec.verdict === "pass"
-                                  ? "secondary"
-                                  : rec.verdict === "fail"
-                                    ? "destructive"
-                                    : "outline"
-                              }
-                            >
-                              {t(`selftest.verdict.${rec.verdict}`)}
-                            </Badge>
-                          ) : null}
-                          {recordTags.android ? (
-                            <Badge
-                              variant="outline"
-                              className="selftest-badge-android"
-                            >
-                              Android {rec.android}
-                            </Badge>
-                          ) : null}
-                          {recordTags.review ? (
-                            <Badge
-                              variant="outline"
-                              className={
-                                rec.review_status === "ready"
-                                  ? "selftest-tone-pass"
-                                  : rec.review_status === "blocked"
-                                    ? "selftest-tone-error"
-                                    : "selftest-tone-warn"
-                              }
-                            >
-                              {t(
-                                `selftest.review.state.${rec.review_status || "pending"}`,
-                              )}
-                              {rec.review_pending
-                                ? " " + rec.review_pending
-                                : ""}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        {recordTags.tags && rec.tags.length ? (
-                          <p className="selftest-record-tags">
-                            {rec.tags.join(" · ")}
-                          </p>
-                        ) : null}
-                        {rec.note ? (
-                          <p className="selftest-record-note">{rec.note}</p>
-                        ) : null}
-                      </button>
-                      {detail && detail.id !== rec.id ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                className="selftest-quick-compare"
-                                aria-label={t("selftest.ctxCompareWithCurrent")}
-                                onClick={() => {
-                                  setCompareId(rec.id);
-                                  showDiff();
-                                }}
-                              >
-                                <GitCompare size={13} aria-hidden="true" />
-                              </button>
-                            }
+                    <ContextTarget
+                      title={`${rec.model_code || rec.model} · ${rec.build}`}
+                      actions={recordContextActions(rec)}
+                    >
+                      <div className="selftest-record-card">
+                        <span
+                          className="selftest-record-check-wrap"
+                          onClickCapture={(e) => {
+                            shiftKeyRef.current = e.shiftKey;
+                          }}
+                        >
+                          <Checkbox
+                            className="selftest-record-check"
+                            checked={selectedIds.includes(rec.id)}
+                            onCheckedChange={() => {
+                              const shift = shiftKeyRef.current;
+                              shiftKeyRef.current = false;
+                              toggleSelected(rec.id, shift);
+                            }}
+                            aria-label={t("selftest.selectRecordCheckbox")}
                           />
-                          <TooltipContent>
-                            {t("selftest.ctxCompareWithCurrent")}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : null}
-                    </div>
-                  </ContextTarget>
-                </li>
-              ))}
+                        </span>
+                        <button
+                          type="button"
+                          className="selftest-record-btn"
+                          aria-current={
+                            selectedId === rec.id ? "true" : undefined
+                          }
+                          onClick={(e) => {
+                            if (e.altKey && detail && detail.id !== rec.id) {
+                              e.preventDefault();
+                              setCompareId(rec.id);
+                              showDiff();
+                              return;
+                            }
+                            void handleSelectRecord(rec.id);
+                          }}
+                        >
+                          <div className="selftest-record-top">
+                            <strong
+                              title={rec.name || rec.model_code || rec.model}
+                            >
+                              <Smartphone size={13} aria-hidden="true" />
+                              <span>
+                                <HighlightText
+                                  text={rec.name || rec.model_code || rec.model}
+                                  query={recordQuery}
+                                />
+                              </span>
+                            </strong>
+                          </div>
+                          <div className="selftest-record-meta">
+                            <span className="selftest-record-build">
+                              {rec.test_type ? `${rec.test_type} · ` : ""}
+                              <HighlightText
+                                text={rec.build}
+                                query={recordQuery}
+                              />
+                            </span>
+                            <time
+                              className="quiet"
+                              dateTime={rec.collected_at}
+                              title={rec.collected_at
+                                .slice(0, 19)
+                                .replace("T", " ")}
+                            >
+                              {formatRelativeTime(rec.collected_at, locale())}
+                            </time>
+                          </div>
+                          <div className="selftest-record-badges">
+                            {compareId === rec.id ? (
+                              <Badge
+                                variant="secondary"
+                                className="selftest-badge-baseline"
+                              >
+                                {t("selftest.diffBaseline")}
+                              </Badge>
+                            ) : null}
+                            {recordTags.checks ? (
+                              <Badge
+                                variant={checkStatusVariant(rec.check_status)}
+                                className={checkStatusTone(rec.check_status)}
+                              >
+                                {checkStatusLabel(rec.check_status)}
+                                {rec.check_errors
+                                  ? ` ${rec.check_errors}`
+                                  : rec.check_warnings
+                                    ? ` ${rec.check_warnings}`
+                                    : ""}
+                              </Badge>
+                            ) : null}
+                            {recordTags.soc &&
+                            rec.soc_vendor &&
+                            rec.soc_vendor !== "Unknown" &&
+                            rec.soc_vendor !== "(not set)" ? (
+                              <Badge
+                                variant="outline"
+                                className="selftest-badge-soc"
+                              >
+                                {rec.soc_vendor}
+                                {rec.soc_model && rec.soc_model !== "(not set)"
+                                  ? ` · ${rec.soc_model}`
+                                  : ""}
+                              </Badge>
+                            ) : null}
+                            {recordTags.verdict ? (
+                              <Badge
+                                variant={
+                                  rec.verdict === "pass"
+                                    ? "secondary"
+                                    : rec.verdict === "fail"
+                                      ? "destructive"
+                                      : "outline"
+                                }
+                              >
+                                {t(`selftest.verdict.${rec.verdict}`)}
+                              </Badge>
+                            ) : null}
+                            {recordTags.android ? (
+                              <Badge
+                                variant="outline"
+                                className="selftest-badge-android"
+                              >
+                                Android {rec.android}
+                              </Badge>
+                            ) : null}
+                            {recordTags.review ? (
+                              <Badge
+                                variant="outline"
+                                className={
+                                  rec.review_status === "ready"
+                                    ? "selftest-tone-pass"
+                                    : rec.review_status === "blocked"
+                                      ? "selftest-tone-error"
+                                      : "selftest-tone-warn"
+                                }
+                              >
+                                {t(
+                                  `selftest.review.state.${rec.review_status || "pending"}`,
+                                )}
+                                {rec.review_pending
+                                  ? " " + rec.review_pending
+                                  : ""}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          {recordTags.tags && rec.tags.length ? (
+                            <p className="selftest-record-tags">
+                              {rec.tags.join(" · ")}
+                            </p>
+                          ) : null}
+                          {rec.note ? (
+                            <p className="selftest-record-note">{rec.note}</p>
+                          ) : null}
+                        </button>
+                        <div className="selftest-card-actions">
+                          {onTogglePin ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    className={`selftest-pin-btn${isPinned ? " is-pinned" : ""}`}
+                                    aria-label={
+                                      isPinned
+                                        ? t("selftest.ctxUnpin")
+                                        : t("selftest.ctxPin")
+                                    }
+                                    aria-pressed={isPinned}
+                                    onClick={() => onTogglePin(rec.id)}
+                                  >
+                                    <Pin size={12} aria-hidden="true" />
+                                  </button>
+                                }
+                              />
+                              <TooltipContent>
+                                {isPinned
+                                  ? t("selftest.ctxUnpin")
+                                  : t("selftest.ctxPin")}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : null}
+                          {detail && detail.id !== rec.id ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    className="selftest-quick-compare"
+                                    aria-label={t(
+                                      "selftest.ctxCompareWithCurrent",
+                                    )}
+                                    onClick={() => {
+                                      setCompareId(rec.id);
+                                      showDiff();
+                                    }}
+                                  >
+                                    <GitCompare size={13} aria-hidden="true" />
+                                  </button>
+                                }
+                              />
+                              <TooltipContent>
+                                {t("selftest.ctxCompareWithCurrent")}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : null}
+                        </div>
+                      </div>
+                    </ContextTarget>
+                  </li>
+                );
+              })}
             </Fragment>
           ))}
         </ul>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import { Check, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ContextTarget } from "@/components/context-menu";
@@ -10,6 +10,7 @@ export type KeyValueItem = {
   label: string;
   value: string;
   title?: string;
+  badge?: ReactNode;
   highlighted?: boolean;
   rowRef?: Ref<HTMLDivElement>;
 };
@@ -65,6 +66,7 @@ export function KeyValueList({
             <dt>{item.label}</dt>
             <dd>
               <span title={item.title}>{item.value}</span>
+              {item.badge}
               {copyable ? (
                 <button
                   type="button"

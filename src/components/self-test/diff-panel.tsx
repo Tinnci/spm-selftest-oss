@@ -6,8 +6,10 @@ import type {
   SelfTestSummary,
 } from "@/api/self_test";
 import { Button } from "@/components/ui/button";
+import { HighlightText } from "@/components/ui/highlight-text";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { useCopyWithToast } from "@/hooks/useCopyWithToast";
 
 export type DiffScope = "all" | "fields" | "packages" | "features" | "drm";
 
@@ -32,6 +34,8 @@ export function DiffPanel({
   setDiffScope,
   diffFilter,
   setDiffFilter,
+  changedOnly = false,
+  onToggleChangedOnly,
   shownFieldChanges,
   shownDrmAdded,
   shownDrmRemoved,
@@ -57,6 +61,8 @@ export function DiffPanel({
   setDiffScope: (scope: DiffScope) => void;
   diffFilter: string;
   setDiffFilter: (value: string) => void;
+  changedOnly?: boolean;
+  onToggleChangedOnly?: () => void;
   shownFieldChanges: SelfTestDiff["field_changes"];
   shownDrmAdded: string[];
   shownDrmRemoved: string[];
@@ -70,6 +76,12 @@ export function DiffPanel({
   handleCopyDiffMarkdown: () => void;
 }) {
   const { t } = useTranslation();
+  const copyWithToast = useCopyWithToast();
+  const visibleKeyFields = diff
+    ? changedOnly
+      ? diff.key_fields.filter((f) => f.left !== f.right)
+      : diff.key_fields
+    : [];
   return (
     <div
       className="selftest-diff-pane"
@@ -194,12 +206,26 @@ export function DiffPanel({
             ))}
           </div>
 
-          <Input
-            value={diffFilter}
-            placeholder={t("selftest.diffFilterPlaceholder")}
-            aria-label={t("selftest.diffFilterPlaceholder")}
-            onChange={(e) => setDiffFilter(e.target.value)}
-          />
+          <div className="selftest-diff-toolbar">
+            <Input
+              value={diffFilter}
+              placeholder={t("selftest.diffFilterPlaceholder")}
+              aria-label={t("selftest.diffFilterPlaceholder")}
+              onChange={(e) => setDiffFilter(e.target.value)}
+            />
+            {onToggleChangedOnly ? (
+              <Button
+                type="button"
+                variant={changedOnly ? "secondary" : "outline"}
+                size="sm"
+                className="selftest-diff-changed-only"
+                aria-pressed={changedOnly}
+                onClick={onToggleChangedOnly}
+              >
+                {t("selftest.diffChangedOnly")}
+              </Button>
+            ) : null}
+          </div>
 
           {!shownFieldChanges.length &&
           !shownDrmAdded.length &&
@@ -215,39 +241,41 @@ export function DiffPanel({
             </p>
           ) : (
             <div className="selftest-diff-sections">
-              <div>
-                <h4>{t("selftest.diffKeyFields")}</h4>
-                <div className="selftest-table-scroll">
-                  <table className="selftest-diff-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">{t("selftest.diffFieldColumn")}</th>
-                        <th scope="col">{t("selftest.diffBaseline")}</th>
-                        <th scope="col">{t("selftest.diffTarget")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {diff.key_fields.map((field) => {
-                        const changed = field.left !== field.right;
-                        return (
-                          <tr
-                            key={field.key}
-                            className={changed ? "is-changed" : ""}
-                          >
-                            <th scope="row">
-                              {t(`selftest.field.${field.key}`)}
-                            </th>
-                            <td>{field.left || "-"}</td>
-                            <td className={changed ? "is-after" : ""}>
-                              {field.right || "-"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              {visibleKeyFields.length ? (
+                <div>
+                  <h4>{t("selftest.diffKeyFields")}</h4>
+                  <div className="selftest-table-scroll">
+                    <table className="selftest-diff-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{t("selftest.diffFieldColumn")}</th>
+                          <th scope="col">{t("selftest.diffBaseline")}</th>
+                          <th scope="col">{t("selftest.diffTarget")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleKeyFields.map((field) => {
+                          const changed = field.left !== field.right;
+                          return (
+                            <tr
+                              key={field.key}
+                              className={changed ? "is-changed" : ""}
+                            >
+                              <th scope="row">
+                                {t(`selftest.field.${field.key}`)}
+                              </th>
+                              <td>{field.left || "-"}</td>
+                              <td className={changed ? "is-after" : ""}>
+                                {field.right || "-"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               {(diffScope === "all" || diffScope === "fields") &&
               shownFieldChanges.length ? (
@@ -260,10 +288,20 @@ export function DiffPanel({
                   <dl className="selftest-fields">
                     {shownFieldChanges.map((c) => (
                       <div key={c.key} className="selftest-field-row">
-                        <dt>{t(`selftest.field.${c.key}`)}</dt>
+                        <dt>
+                          <HighlightText
+                            text={t(`selftest.field.${c.key}`)}
+                            query={diffFilter}
+                          />
+                        </dt>
                         <dd>
-                          <span className="quiet">{c.left}</span> →{" "}
-                          <strong>{c.right}</strong>
+                          <span className="quiet">
+                            <HighlightText text={c.left} query={diffFilter} />
+                          </span>{" "}
+                          →{" "}
+                          <strong>
+                            <HighlightText text={c.right} query={diffFilter} />
+                          </strong>
                         </dd>
                       </div>
                     ))}
@@ -283,12 +321,28 @@ export function DiffPanel({
                   <ul className="selftest-mono-list">
                     {shownDrmAdded.map((x) => (
                       <li key={`da-${x}`} className="selftest-diff-add">
-                        + {x}
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(x)}
+                        >
+                          <span>
+                            + <HighlightText text={x} query={diffFilter} />
+                          </span>
+                        </button>
                       </li>
                     ))}
                     {shownDrmRemoved.map((x) => (
                       <li key={`dr-${x}`} className="selftest-diff-del">
-                        - {x}
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(x)}
+                        >
+                          <span>
+                            - <HighlightText text={x} query={diffFilter} />
+                          </span>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -306,7 +360,15 @@ export function DiffPanel({
                   <ul className="selftest-mono-list">
                     {shownPkgsAdded.map((p) => (
                       <li key={p} className="selftest-diff-add">
-                        + {p}
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(p)}
+                        >
+                          <span>
+                            + <HighlightText text={p} query={diffFilter} />
+                          </span>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -324,7 +386,15 @@ export function DiffPanel({
                   <ul className="selftest-mono-list">
                     {shownPkgsRemoved.map((p) => (
                       <li key={p} className="selftest-diff-del">
-                        - {p}
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(p)}
+                        >
+                          <span>
+                            - <HighlightText text={p} query={diffFilter} />
+                          </span>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -342,7 +412,15 @@ export function DiffPanel({
                   <ul className="selftest-mono-list">
                     {shownFeatsAdded.map((f) => (
                       <li key={f} className="selftest-diff-add">
-                        + {f}
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(f)}
+                        >
+                          <span>
+                            + <HighlightText text={f} query={diffFilter} />
+                          </span>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -360,14 +438,23 @@ export function DiffPanel({
                   <ul className="selftest-mono-list">
                     {shownFeatsRemoved.map((f) => (
                       <li key={f} className="selftest-diff-del">
-                        - {f}
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(f)}
+                        >
+                          <span>
+                            - <HighlightText text={f} query={diffFilter} />
+                          </span>
+                        </button>
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : null}
 
-              {(diffScope === "all" || diffScope === "packages") &&
+              {!changedOnly &&
+              (diffScope === "all" || diffScope === "packages") &&
               shownPkgsSame.length ? (
                 <details className="selftest-diff-same">
                   <summary>
@@ -377,13 +464,24 @@ export function DiffPanel({
                   </summary>
                   <ul className="selftest-mono-list">
                     {shownPkgsSame.map((entry) => (
-                      <li key={entry}>{entry}</li>
+                      <li key={entry}>
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(entry)}
+                        >
+                          <span>
+                            <HighlightText text={entry} query={diffFilter} />
+                          </span>
+                        </button>
+                      </li>
                     ))}
                   </ul>
                 </details>
               ) : null}
 
-              {(diffScope === "all" || diffScope === "features") &&
+              {!changedOnly &&
+              (diffScope === "all" || diffScope === "features") &&
               shownFeatsSame.length ? (
                 <details className="selftest-diff-same">
                   <summary>
@@ -393,7 +491,17 @@ export function DiffPanel({
                   </summary>
                   <ul className="selftest-mono-list">
                     {shownFeatsSame.map((entry) => (
-                      <li key={entry}>{entry}</li>
+                      <li key={entry}>
+                        <button
+                          type="button"
+                          className="selftest-mono-item"
+                          onClick={() => void copyWithToast(entry)}
+                        >
+                          <span>
+                            <HighlightText text={entry} query={diffFilter} />
+                          </span>
+                        </button>
+                      </li>
                     ))}
                   </ul>
                 </details>
