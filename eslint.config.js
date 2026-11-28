@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 import babelParser from "@babel/eslint-parser";
 import reactHooks from "eslint-plugin-react-hooks";
-import jsxA11y from "eslint-plugin-jsx-a11y";
+import jsxA11y from "eslint-plugin-jsx-a11y-x";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
 import comments from "./eslint-rules/no-comments.mjs";
@@ -65,14 +65,14 @@ export default [
   },
   {
     files: ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"],
-    plugins: { "react-hooks": reactHooks, "jsx-a11y": jsxA11y },
+    plugins: { "react-hooks": reactHooks, "jsx-a11y-x": jsxA11y },
     rules: {
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "error",
-      ...jsxA11y.flatConfigs.recommended.rules,
-      "jsx-a11y/label-has-associated-control": "off",
-      "jsx-a11y/no-autofocus": "off",
-      "jsx-a11y/no-noninteractive-tabindex": "off",
+      ...jsxA11y.configs.recommended.rules,
+      "jsx-a11y-x/label-has-associated-control": "off",
+      "jsx-a11y-x/no-autofocus": "off",
+      "jsx-a11y-x/no-noninteractive-tabindex": "off",
     },
   },
   prettier,
